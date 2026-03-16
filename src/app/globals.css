@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+:root {
+  /* Su Sushi Brand Colors */
+  --primary: #1B4332;
+  --primary-light: rgba(27, 67, 50, 0.1);
+  --primary-medium: rgba(27, 67, 50, 0.2);
+  --primary-shadow: rgba(27, 67, 50, 0.25);
+
+  /* Secondary - Warm Wood/Bamboo */
+  --secondary: #C4956A;
+  --secondary-light: rgba(196, 149, 106, 0.15);
+
+  /* Background Colors - Warm Off-white */
+  --background: #FAF8F5;
+  --background-card: #ffffff;
+  --background-glass: rgba(255, 255, 255, 0.6);
+  --background-glass-dark: rgba(255, 255, 255, 0.9);
+
+  /* Text Colors */
+  --text-heading: #1a1a1a;
+  --text-body: #374151;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --text-on-primary: #ffffff;
+
+  /* Border Colors */
+  --border-light: #f3f4f6;
+  --border-medium: #e5e7eb;
+  --border-heavy: #d1d5db;
+
+  /* Accent Colors */
+  --accent-gold: #d4a574;
+  --accent-gold-bg: rgba(212, 165, 116, 0.2);
+
+  /* Spacing */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 40px;
+  --radius-full: 9999px;
+
+  /* Fonts */
+  --font-sans: var(--font-plus-jakarta-sans), system-ui, sans-serif;
+  --font-arabic: var(--font-tajawal), system-ui, sans-serif;
+}
+
+@theme inline {
+  /* Colors */
+  --color-primary: var(--primary);
+  --color-primary-light: var(--primary-light);
+  --color-primary-medium: var(--primary-medium);
+  --color-secondary: var(--secondary);
+  --color-secondary-light: var(--secondary-light);
+  --color-background: var(--background);
+  --color-background-card: var(--background-card);
+  --color-background-glass: var(--background-glass);
+  --color-text-heading: var(--text-heading);
+  --color-text-body: var(--text-body);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-on-primary: var(--text-on-primary);
+  --color-border-light: var(--border-light);
+  --color-border-medium: var(--border-medium);
+  --color-border-heavy: var(--border-heavy);
+  --color-accent-gold: var(--accent-gold);
+  --color-accent-gold-bg: var(--accent-gold-bg);
+
+  /* Border Radius */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 40px;
+
+  /* Shadows */
+  --shadow-sm: 0px 1px 2px 0px rgba(0, 0, 0, 0.05);
+  --shadow-card: 0px 2px 8px 0px rgba(27, 67, 50, 0.08);
+  --shadow-dish: 0px 25px 50px -12px rgba(27, 67, 50, 0.2);
+  --shadow-primary: 0px 10px 20px -5px var(--primary-shadow);
+  --shadow-float: 0px 20px 25px -5px rgba(0, 0, 0, 0.08), 0px 8px 10px -6px rgba(0, 0, 0, 0.04);
+  --shadow-up: 0px -10px 25px -5px rgba(0, 0, 0, 0.05);
+
+  /* Fonts */
+  --font-sans: var(--font-plus-jakarta-sans), system-ui, sans-serif;
+  --font-arabic: var(--font-tajawal), system-ui, sans-serif;
+}
+
+/* Base styles */
+body {
+  background: var(--background);
+  color: var(--text-body);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* RTL support */
+[dir="rtl"] body {
+  font-family: var(--font-arabic);
+}
+
+/* Glassmorphism utilities */
+.glass {
+  background: var(--background-glass);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.glass-strong {
+  background: var(--background-glass-dark);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Hide scrollbar but allow scrolling */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Safe area padding for mobile */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+/* Su Sushi specific utilities */
+.bg-wood {
+  background: linear-gradient(135deg, #C4956A 0%, #b8895e 100%);
+}
+
+.text-wood {
+  color: var(--secondary);
+}

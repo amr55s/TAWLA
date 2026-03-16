@@ -1,0 +1,20 @@
+# Cursor AI Rules for Restaurant Menu SaaS
+
+## Core Stack
+- Framework: Next.js (App Router)
+- Language: TypeScript
+- Styling: Tailwind CSS
+- Animations: Framer Motion
+- State Management: Zustand
+- Backend/DB: Supabase
+
+## Development Rules
+1. ALWAYS use Next.js App Router conventions (layout.tsx, page.tsx).
+2. Write clean, modular, and reusable React functional components.
+3. Use Tailwind CSS for ALL styling. DO NOT use raw CSS or inline styles unless strictly necessary for dynamic theme variables.
+4. Support Multi-tenancy: Rely on CSS Variables (e.g., `var(--primary)`) in Tailwind config to allow dynamic theming per restaurant.
+5. Mobile-First Approach: Build components for mobile screens first, then scale up using `md:` and `lg:` prefixes.
+6. RTL & Bilingual Support: Use logical Tailwind properties (e.g., `ms-4`, `pe-2`) instead of physical ones (`ml-4`, `pr-2`) to seamlessly support Arabic (RTL) and English (LTR).
+7. Animations: Keep them subtle and elegant using Framer Motion (e.g., smooth fade-ins, gentle scale on tap). Avoid heavy animations.
+8. NEVER generate dummy data if database schema is provided; refer to `@docs/Database-Schema.md`.
+9. Always read `@docs/PRD.md` and `@docs/Design-System.md` before creating new complex UI features.
