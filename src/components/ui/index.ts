@@ -11,3 +11,4 @@ export { BottomSheet } from './BottomSheet';
 export { ItemDetailSheet } from './ItemDetailSheet';
 export { MenuItemImage } from './MenuItemImage';
 export { NumericKeypad } from './NumericKeypad';
+export { CallWaiterSheet } from './CallWaiterSheet';

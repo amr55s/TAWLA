@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { clsx } from 'clsx';
 
@@ -46,6 +46,11 @@ export function MenuItemImage({
 }: MenuItemImageProps) {
   const [hasError, setHasError] = useState(false);
 
+  useEffect(() => {
+    // Reset error state whenever the image source changes
+    setHasError(false);
+  }, [src]);
+
   if (!src || src.trim() === '' || hasError) {
     return <Placeholder />;
   }
@@ -58,7 +63,6 @@ export function MenuItemImage({
       sizes={sizes}
       priority={priority}
       className={clsx('object-cover', className)}
-      onError={() => setHasError(true)}
     />
   );
 }
