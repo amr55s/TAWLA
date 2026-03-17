@@ -11,10 +11,10 @@ export async function getRestaurantBySlugClient(slug: string): Promise<Restauran
     .from('restaurants')
     .select('*')
     .eq('slug', slug)
-    .single();
+    .maybeSingle();
   
   if (error) {
-    console.error('Error fetching restaurant:', error);
+    console.error('Error fetching restaurant:', JSON.stringify(error, null, 2), error);
     return null;
   }
   
@@ -29,7 +29,7 @@ export async function getCategoriesByRestaurantClient(restaurantId: string): Pro
     .order('sort_order', { ascending: true });
   
   if (error) {
-    console.error('Error fetching categories:', error);
+    console.error('Error fetching categories:', JSON.stringify(error, null, 2), error);
     return [];
   }
   
@@ -43,7 +43,7 @@ export async function getMenuItemsByRestaurantClient(restaurantId: string): Prom
     .eq('restaurant_id', restaurantId);
   
   if (catError || !categoriesData) {
-    console.error('Error fetching categories:', catError);
+    console.error('Error fetching categories:', JSON.stringify(catError, null, 2), catError);
     return [];
   }
   
@@ -57,7 +57,7 @@ export async function getMenuItemsByRestaurantClient(restaurantId: string): Prom
     .eq('is_available', true);
   
   if (itemsError || !itemsData) {
-    console.error('Error fetching menu items:', itemsError);
+    console.error('Error fetching menu items:', JSON.stringify(itemsError, null, 2), itemsError);
     return [];
   }
   
@@ -74,11 +74,20 @@ export async function getActiveOrdersClient(restaurantId: string): Promise<Order
     .from('orders')
     .select('*')
     .eq('restaurant_id', restaurantId)
-    .in('status', ['confirmed_by_waiter', 'in_kitchen', 'ready'])
+    .in('status', [
+      'pending',
+      'confirmed',
+      'preparing',
+      'served',
+      // Backward compatibility for legacy rows.
+      'confirmed_by_waiter',
+      'in_kitchen',
+      'ready',
+    ])
     .order('created_at', { ascending: true });
   
   if (error) {
-    console.error('Error fetching active orders:', error);
+    console.error('Error fetching active orders:', JSON.stringify(error, null, 2), error);
     return [];
   }
   
@@ -95,7 +104,7 @@ export async function getOrderItemsClient(orderId: string) {
     .eq('order_id', orderId);
   
   if (error) {
-    console.error('Error fetching order items:', error);
+    console.error('Error fetching order items:', JSON.stringify(error, null, 2), error);
     return [];
   }
   
@@ -109,7 +118,7 @@ export async function updateOrderStatusClient(orderId: string, status: OrderStat
     .eq('id', orderId);
   
   if (error) {
-    console.error('Error updating order status:', error);
+    console.error('Error updating order status:', JSON.stringify(error, null, 2), error);
     return false;
   }
   
@@ -124,7 +133,7 @@ export async function getTablesByRestaurantClient(restaurantId: string): Promise
     .order('table_number', { ascending: true });
   
   if (error) {
-    console.error('Error fetching tables:', error);
+    console.error('Error fetching tables:', JSON.stringify(error, null, 2), error);
     return [];
   }
   
@@ -139,7 +148,7 @@ export async function getTableByIdClient(tableId: string): Promise<Table | null>
     .single();
   
   if (error) {
-    console.error('Error fetching table:', error);
+    console.error('Error fetching table:', JSON.stringify(error, null, 2), error);
     return null;
   }
   
@@ -192,6 +201,8 @@ export interface CreateOrderClientInput {
   total_amount: number;
   special_requests?: string;
   qr_code_data?: string;
+  guest_id?: string;
+  status?: OrderStatus;
   items: {
     menu_item_id: string;
     quantity: number;
@@ -208,13 +219,15 @@ export async function createOrderWithItemsClient(input: CreateOrderClientInput):
       total_amount: input.total_amount,
       special_requests: input.special_requests,
       qr_code_data: input.qr_code_data,
-      status: 'confirmed_by_waiter' as OrderStatus,
+      guest_id: input.guest_id || null,
+      // Guest orders must begin as pending and be confirmed by waiter later.
+      status: input.status || 'pending',
     })
     .select()
     .single();
   
   if (orderError || !orderData) {
-    console.error('Error creating order:', orderError);
+    console.error('Error creating order:', JSON.stringify(orderError, null, 2), orderError);
     return null;
   }
   
@@ -232,7 +245,7 @@ export async function createOrderWithItemsClient(input: CreateOrderClientInput):
     .insert(orderItems);
   
   if (itemsError) {
-    console.error('Error creating order items:', itemsError);
+    console.error('Error creating order items:', JSON.stringify(itemsError, null, 2), itemsError);
   }
   
   return order;
@@ -247,7 +260,7 @@ export async function getTableByNumberClient(restaurantId: string, tableNumber: 
     .single();
   
   if (error) {
-    console.error('Error fetching table:', error);
+    console.error('Error fetching table:', JSON.stringify(error, null, 2), error);
     return null;
   }
   

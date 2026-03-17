@@ -1,0 +1,614 @@
+[
+  {
+    "id": "TC001",
+    "title": "Guest can add one menu item to cart and place order to reach QR confirmation",
+    "description": "Verifies an unauthenticated guest can add an item to cart, checkout, place an order, and see the QR confirmation page.",
+    "category": "Guest Ordering Flow",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Type \"susushi\" into the restaurant slug field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"1\" into the table number field"
+      },
+      {
+        "type": "action",
+        "description": "Press Enter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/susushi/menu\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Add to cart\" on the first visible menu item"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Cart\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/susushi/cart\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the cart items list is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Checkout\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/susushi/checkout\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Place order\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/susushi/qr\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the QR code confirmation element is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Guest can go from menu to cart and see selected item present",
+    "description": "Verifies the cart accurately reflects an item added from the menu for the given table session.",
+    "category": "Guest Ordering Flow",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Type \"susushi\" into the restaurant slug field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"1\" into the table number field"
+      },
+      {
+        "type": "action",
+        "description": "Press Enter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/susushi/menu\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the menu items list is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Add to cart\" on the first visible menu item"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Cart\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/susushi/cart\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"1\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Guest can reach checkout from cart and place order",
+    "description": "Verifies the primary navigation from cart to checkout works and results in order placement flow.",
+    "category": "Guest Ordering Flow",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Type \"susushi\" into the restaurant slug field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"1\" into the table number field"
+      },
+      {
+        "type": "action",
+        "description": "Press Enter"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Add to cart\" on the first visible menu item"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Cart\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Checkout\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/susushi/checkout\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Place order\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/susushi/qr\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Order\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Guest can go directly from menu to checkout after adding an item",
+    "description": "Verifies a guest can proceed to checkout directly from the menu flow after adding an item and still place an order successfully.",
+    "category": "Guest Ordering Flow",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Type \"susushi\" into the restaurant slug field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"1\" into the table number field"
+      },
+      {
+        "type": "action",
+        "description": "Press Enter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/susushi/menu\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Add to cart\" on the first visible menu item"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Checkout\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/susushi/checkout\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Place order\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/susushi/qr\""
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Guest checkout without items shows an empty-cart blocking message",
+    "description": "Verifies that checkout cannot be completed when the cart is empty and a visible message prompts the user to add items.",
+    "category": "Guest Ordering Flow",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Type \"susushi\" into the restaurant slug field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"1\" into the table number field"
+      },
+      {
+        "type": "action",
+        "description": "Press Enter"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Checkout\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/susushi/checkout\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Place order\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"cart\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/susushi/checkout\""
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "QR confirmation page shows QR element and confirmation text after successful order",
+    "description": "Verifies that after a successful order the confirmation page visibly contains a QR code element and confirmation wording.",
+    "category": "Guest Ordering Flow",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Type \"susushi\" into the restaurant slug field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"1\" into the table number field"
+      },
+      {
+        "type": "action",
+        "description": "Press Enter"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Add to cart\" on the first visible menu item"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Checkout\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Place order\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/susushi/qr\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the QR code confirmation element is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"QR\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Admin can sign in and create a new menu item that appears in the list",
+    "description": "Verifies an admin can log in with valid credentials, open Admin Menu, create an item, and see it listed.",
+    "category": "Admin Login and Create Menu Item",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/admin\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Menu\" link or navigation item"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/admin/menu\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add Item\" button"
+      },
+      {
+        "type": "action",
+        "description": "Type \"E2E Test Item\" into the item name field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"12.50\" into the item price field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Sushi\" from the category dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Create item\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"E2E Test Item\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Invalid password shows authentication error on login",
+    "description": "Verifies the login form shows an 'Invalid credentials' error when a wrong password is used.",
+    "category": "Admin Login and Create Menu Item",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"admin@susushi.com\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"wrongpassword\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Invalid credentials\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\""
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Menu item creation requires Name field (client-side/server-side validation)",
+    "description": "Verifies creating a menu item without a name is blocked and shows 'Name is required'.",
+    "category": "Admin Login and Create Menu Item",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/admin\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Menu\" link or navigation item"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/admin/menu\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add Item\" button"
+      },
+      {
+        "type": "action",
+        "description": "Type \"9.99\" into the item price field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Sushi\" from the category dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Create item\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Name is required\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Admin menu page loads after login and shows Add Item entry point",
+    "description": "Verifies an authenticated admin can reach the Admin Menu page and see controls to add items.",
+    "category": "Admin Login and Create Menu Item",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/admin\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Menu\" link or navigation item"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/admin/menu\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the \"Add Item\" button is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Cancel/close Add Item form does not create an item",
+    "description": "Verifies dismissing the Add Item dialog/form does not add a new item to the menu list.",
+    "category": "Admin Login and Create Menu Item",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/admin\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Menu\" link or navigation item"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/admin/menu\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add Item\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Cancel\" or \"Close\" button on the add item form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the \"Add Item\" button is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Create menu item with zero price is rejected (price validation)",
+    "description": "Verifies the form rejects a zero price if validation rules require a positive value.",
+    "category": "Admin Login and Create Menu Item",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/admin\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Menu\" link or navigation item"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/admin/menu\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add Item\" button"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Zero Price Item\" into the item name field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"0\" into the item price field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Sushi\" from the category dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Create item\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Price\" is visible"
+      }
+    ]
+  }
+]

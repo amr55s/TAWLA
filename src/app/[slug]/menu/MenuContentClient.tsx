@@ -1,9 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { CategoryTabs, DishCard, FloatingNavBar, ItemDetailSheet } from '@/components/ui';
 import { useCartStore } from '@/store/cart';
 import type { Restaurant, Category, MenuItemWithCategory, MenuItem } from '@/types/database';
@@ -28,8 +28,16 @@ export function MenuContentClient({
     const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
     const [isSheetOpen, setIsSheetOpen] = useState(false);
 
-    const { addItem, getTotalItems, tableNumber } = useCartStore();
-    const cartCount = getTotalItems();
+    const cartStore = useCartStore();
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    const addItem = cartStore.addItem;
+    const cartCount = mounted ? cartStore.getTotalItems() : 0;
+    const tableNumber = mounted ? cartStore.tableNumber : null;
 
     const filteredItems = useMemo(() => {
         let items = menuItems;
@@ -165,20 +173,24 @@ export function MenuContentClient({
             <main className="px-4 pt-2 pb-4">
                 {filteredItems.length > 0 ? (
                     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-                        {filteredItems.map((item, index) => (
-                            <motion.div
-                                key={item.id}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: index * 0.03, duration: 0.3 }}
-                            >
-                                <DishCard
-                                    item={{ ...item, badge: (item as MenuItem & { badge?: string }).badge || null }}
-                                    onAddToCart={handleAddToCart}
-                                    onCardClick={handleCardClick}
-                                />
-                            </motion.div>
-                        ))}
+                        <AnimatePresence mode="popLayout">
+                            {filteredItems.map((item) => (
+                                <motion.div
+                                    key={item.id}
+                                    layout
+                                    initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.8 }}
+                                    transition={{ duration: 0.25 }}
+                                >
+                                    <DishCard
+                                        item={{ ...item, badge: (item as MenuItem & { badge?: string }).badge || null }}
+                                        onAddToCart={handleAddToCart}
+                                        onCardClick={handleCardClick}
+                                    />
+                                </motion.div>
+                            ))}
+                        </AnimatePresence>
                     </div>
                 ) : (
                     <div className="text-center py-16">

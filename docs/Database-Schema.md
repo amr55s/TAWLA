@@ -5,7 +5,8 @@
 - `name` (String)
 - `slug` (String, unique) - e.g., "dajajy-restaurant"
 - `logo_url` (String)
-- `theme_colors` (JSONB) - e.g., `{"primary": "#FF5733", "background": "#FAFAFA"}`
+- `theme_colors` (JSONB) - e.g., `{"primary": "#FF5733", "background": "#FAFAFA", "fontFamily": "Tajawal"}`
+- `table_count` (Integer) - number of tables shown in waiter/cashier dashboards
 
 ## 2. `categories` (Menu Categories)
 - `id` (UUID, Primary Key)
@@ -33,7 +34,8 @@
 - `id` (UUID, Primary Key)
 - `restaurant_id` (UUID, Foreign Key)
 - `table_id` (UUID, Foreign Key)
-- `status` (Enum: 'pending', 'confirmed_by_waiter', 'in_kitchen', 'completed')
+- `guest_id` (String/UUID, nullable) - anonymous guest session id for strict order privacy
+- `status` (Enum: 'pending', 'confirmed_by_waiter', 'in_kitchen', 'ready', 'served', 'paid', 'cancelled', 'completed')
 - `total_amount` (Decimal)
 - `created_at` (Timestamp)
 

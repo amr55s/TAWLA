@@ -1,4 +1,14 @@
-export type OrderStatus = 'pending' | 'confirmed_by_waiter' | 'in_kitchen' | 'ready' | 'completed';
+export type OrderStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'preparing'
+  | 'confirmed_by_waiter'
+  | 'in_kitchen'
+  | 'ready'
+  | 'served'
+  | 'paid'
+  | 'cancelled'
+  | 'completed';
 export type WaiterCallType = 'assistance' | 'bill';
 export type WaiterCallStatus = 'active' | 'resolved';
 
@@ -6,6 +16,7 @@ export interface ThemeColors {
   primary: string;
   background: string;
   accent?: string;
+  fontFamily?: string;
 }
 
 export interface Restaurant {
@@ -14,6 +25,7 @@ export interface Restaurant {
   slug: string;
   logo_url: string | null;
   theme_colors: ThemeColors;
+  table_count?: number;
   created_at?: string;
 }
 
@@ -56,6 +68,9 @@ export interface Order {
   id: string;
   restaurant_id: string;
   table_id: string;
+  guest_id?: string | null;
+  order_number: number;
+  qr_code_data?: string | null;
   status: OrderStatus;
   total_amount: number;
   special_requests?: string | null;

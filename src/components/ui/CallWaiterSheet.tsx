@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import { X, HandPlatter, ReceiptText, CheckCircle2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useCartStore } from '@/store/cart';
 import { createClient } from '@/lib/supabase/client';
 
@@ -35,16 +36,28 @@ export function CallWaiterSheet({ isOpen, onClose, restaurantSlug }: CallWaiterS
                 .single();
 
             if (tableData?.tables?.[0]?.id) {
-                // Here we silently insert into the new table
-                // We catch errors in case the schema wasn't pushed yet by the user since this is a new feature
-                await supabase.from('waiter_calls').insert({
+                const { error: insertError } = await supabase.from('waiter_calls').insert({
+                    restaurant_id: tableData.id,
                     table_id: tableData.tables[0].id,
                     type: type,
                     status: 'active'
                 });
+
+                if (insertError) {
+                    console.error('waiter_calls insert failed:', insertError);
+                    toast.error('Failed to call waiter. Please try again.');
+                    setIsSubmitting(false);
+                    return;
+                }
+            } else {
+                console.error('Could not find table UUID for table:', tableNumber);
+                toast.error('Table not found. Please try again.');
+                setIsSubmitting(false);
+                return;
             }
 
             setSuccessStatus(type);
+            toast.success('Your waiter has been notified!');
             setTimeout(() => {
                 setSuccessStatus(null);
                 onClose();
@@ -149,7 +162,7 @@ export function CallWaiterSheet({ isOpen, onClose, restaurantSlug }: CallWaiterS
 
                         {!tableNumber && (
                             <p className="text-sm text-red-500 text-center mt-4">
-                                Please scan a table QR code first to call a waiter.
+                                Please select a table first to call a waiter.
                             </p>
                         )}
                     </motion.div>

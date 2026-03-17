@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import { toast } from 'sonner';
-import { createClient } from '@/lib/supabase/client';
+import { createBrowserClient } from '@supabase/ssr';
 import { MenuItemImage } from '@/components/ui/MenuItemImage';
 import type { MenuItem, Category } from '@/types/database';
 
@@ -40,13 +40,22 @@ export default function AdminMenuPage() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const supabase = createClient();
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
   const fetchData = useCallback(async () => {
     const [itemsRes, catsRes] = await Promise.all([
       supabase.from('menu_items').select('*').order('created_at', { ascending: false }),
       supabase.from('categories').select('*').order('sort_order', { ascending: true }),
     ]);
+    if (itemsRes.error) {
+      console.error('Fetch menu_items error:', itemsRes.error.message, itemsRes.error.details, itemsRes.error.hint);
+    }
+    if (catsRes.error) {
+      console.error('Fetch categories error:', catsRes.error.message, catsRes.error.details, catsRes.error.hint);
+    }
     setItems(itemsRes.data || []);
     setCategories(catsRes.data || []);
     setLoading(false);
@@ -140,13 +149,20 @@ export default function AdminMenuPage() {
         }
       }
 
+      const priceNum = parseFloat(form.price);
+      if (isNaN(priceNum) || priceNum < 0) {
+        toast.error('Invalid price value');
+        setSaving(false);
+        return;
+      }
+
       const payload = {
         name_en: form.name_en.trim(),
-        name_ar: form.name_ar.trim(),
+        name_ar: form.name_ar.trim() || form.name_en.trim(),
         description_en: form.description_en.trim() || null,
         description_ar: form.description_ar.trim() || null,
         category_id: form.category_id,
-        price: parseFloat(form.price),
+        price: priceNum,
         is_available: form.is_available,
         image_url: imageUrl,
       };
@@ -156,20 +172,34 @@ export default function AdminMenuPage() {
           .from('menu_items')
           .update(payload)
           .eq('id', editingItem.id);
-        if (error) throw error;
+        if (error) {
+          console.error('Update menu_item error:', error.message, error.details, error.hint, error.code);
+          toast.error(`Update failed: ${error.message}`);
+          setSaving(false);
+          return;
+        }
         toast.success('Item updated successfully');
       } else {
         const { error } = await supabase
           .from('menu_items')
           .insert(payload);
-        if (error) throw error;
+        if (error) {
+          console.error('Insert menu_item error:', error.message, error.details, error.hint, error.code);
+          toast.error(`Insert failed: ${error.message}`);
+          setSaving(false);
+          return;
+        }
         toast.success('Item created successfully');
       }
 
       closeForm();
       fetchData();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Save failed';
+      console.error('Menu item save error (unexpected):', err);
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Save failed — check console for details';
       toast.error(message);
     } finally {
       setSaving(false);

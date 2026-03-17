@@ -62,6 +62,8 @@ export function MenuItemImage({
       fill={fill}
       sizes={sizes}
       priority={priority}
+      unoptimized={true}
+      onError={() => setHasError(true)}
       className={clsx('object-cover', className)}
     />
   );

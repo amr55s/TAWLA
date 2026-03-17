@@ -66,7 +66,7 @@ export function FloatingNavBar({ restaurantSlug, cartCount = 0 }: FloatingNavBar
 
   const isActive = (href: string) => {
     if (href.includes('/menu') && pathname.includes('/menu')) return true;
-    if (href.includes('/cart') && (pathname.includes('/cart') || pathname.includes('/checkout') || pathname.includes('/qr'))) return true;
+    if (href.includes('/cart') && (pathname.includes('/cart') || pathname.includes('/checkout') || pathname.includes('/orders'))) return true;
     return pathname === href;
   };
 

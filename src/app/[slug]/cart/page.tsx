@@ -112,7 +112,7 @@ export default function CartPage({
             onClick={handleProceed}
             className="w-full py-4 bg-primary rounded-2xl text-white text-base font-bold transition-colors active:bg-primary/90"
           >
-            Generate QR for Order 📱
+            Proceed to Checkout
           </motion.button>
         </div>
       )}

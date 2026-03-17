@@ -12,3 +12,4 @@ export { ItemDetailSheet } from './ItemDetailSheet';
 export { MenuItemImage } from './MenuItemImage';
 export { NumericKeypad } from './NumericKeypad';
 export { CallWaiterSheet } from './CallWaiterSheet';
+export { Skeleton, SkeletonLine, SkeletonTableCard, SkeletonOrderCard, SkeletonInsightCard } from './Skeleton';

@@ -14,9 +14,11 @@ interface CartState {
   items: CartItem[];
   tableNumber: string | null;
   restaurantSlug: string | null;
-  
+  guestId: string;
+
   setTableNumber: (tableNumber: string) => void;
   setRestaurantSlug: (slug: string) => void;
+  setGuestId: (id: string) => void;
   addItem: (menuItem: MenuItem, quantity?: number) => void;
   removeItem: (menuItemId: string) => void;
   updateQuantity: (menuItemId: string, quantity: number) => void;
@@ -34,10 +36,13 @@ export const useCartStore = create<CartState>()(
       items: [],
       tableNumber: null,
       restaurantSlug: null,
+      guestId: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
 
       setTableNumber: (tableNumber: string) => set({ tableNumber }),
       
       setRestaurantSlug: (slug: string) => set({ restaurantSlug: slug }),
+
+      setGuestId: (id: string) => set({ guestId: id }),
 
       addItem: (menuItem: MenuItem, quantity = 1) => {
         const { items } = get();
@@ -87,7 +92,7 @@ export const useCartStore = create<CartState>()(
         });
       },
 
-      clearCart: () => set({ items: [], tableNumber: null }),
+      clearCart: () => set({ items: [] }),
 
       getSubtotal: () => {
         return get().items.reduce(
@@ -117,6 +122,7 @@ export const useCartStore = create<CartState>()(
         items: state.items,
         tableNumber: state.tableNumber,
         restaurantSlug: state.restaurantSlug,
+        guestId: state.guestId,
       }),
     }
   )

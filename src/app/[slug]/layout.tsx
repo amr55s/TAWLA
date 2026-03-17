@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getRestaurantBySlug } from '@/lib/data/restaurants';
+import { RestaurantThemeSyncClient } from './RestaurantThemeSyncClient';
 
 interface RestaurantLayoutProps {
   children: React.ReactNode;
@@ -17,16 +18,12 @@ export default async function RestaurantLayout({
     notFound();
   }
 
-  const themeStyles = {
-    '--primary': restaurant.theme_colors.primary,
-    '--background': restaurant.theme_colors.background,
-    '--primary-light': `${restaurant.theme_colors.primary}1a`,
-    '--primary-medium': `${restaurant.theme_colors.primary}33`,
-    '--primary-shadow': `${restaurant.theme_colors.primary}33`,
-  } as React.CSSProperties;
-
   return (
-    <div style={themeStyles} className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background">
+      <RestaurantThemeSyncClient
+        restaurantId={restaurant.id}
+        initialThemeColors={restaurant.theme_colors}
+      />
       {children}
     </div>
   );

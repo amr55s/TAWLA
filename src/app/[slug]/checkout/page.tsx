@@ -1,11 +1,17 @@
 'use client';
 
 import * as React from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
+import { toast } from 'sonner';
 import { useCartStore } from '@/store/cart';
 import { MenuItemImage } from '@/components/ui/MenuItemImage';
+import {
+  getRestaurantBySlugClient,
+  getTableByNumberClient,
+  createOrderWithItemsClient,
+} from '@/lib/data/orders.client';
 
 const SERVICE_FEE_PERCENTAGE = 10;
 
@@ -19,6 +25,7 @@ export default function CheckoutPage({
 
   const [specialRequests, setSpecialRequests] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [navigatingToOrders, setNavigatingToOrders] = useState(false);
 
   const {
     items,
@@ -26,6 +33,8 @@ export default function CheckoutPage({
     getServiceFee,
     getTotal,
     tableNumber,
+    clearCart,
+    guestId,
   } = useCartStore();
 
   const subtotal = getSubtotal();
@@ -33,13 +42,75 @@ export default function CheckoutPage({
   const total = getTotal(SERVICE_FEE_PERCENTAGE);
 
   const handlePlaceOrder = async () => {
+    if (!tableNumber) {
+      toast.error('No table selected. Please go back and select a table.');
+      return;
+    }
+
     setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    router.push(`/${slug}/qr`);
+
+    try {
+      const restaurant = await getRestaurantBySlugClient(slug);
+      if (!restaurant) {
+        toast.error('Restaurant not found');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const table = await getTableByNumberClient(
+        restaurant.id,
+        parseInt(tableNumber, 10)
+      );
+      if (!table) {
+        toast.error(`Table #${tableNumber} not found in the system`);
+        setIsSubmitting(false);
+        return;
+      }
+
+      let finalGuestId = useCartStore.getState().guestId;
+      if (!finalGuestId) {
+        finalGuestId = 'guest_' + Math.random().toString(36).substr(2, 9);
+        useCartStore.getState().setGuestId(finalGuestId);
+      }
+
+      const order = await createOrderWithItemsClient({
+        restaurant_id: restaurant.id,
+        table_id: table.id,
+        status: 'pending',
+        total_amount: total,
+        special_requests: specialRequests.trim() || undefined,
+        guest_id: finalGuestId,
+        items: items.map((ci) => ({
+          menu_item_id: ci.menuItem.id,
+          quantity: ci.quantity,
+          price_at_time: ci.menuItem.price,
+        })),
+      });
+
+      if (!order) {
+        toast.error('Failed to submit order. Please try again.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Navigate first; clearCart after. Use a flag so the empty-cart guard doesn't redirect to /cart on re-render.
+      setNavigatingToOrders(true);
+      router.push(`/${slug}/orders`);
+      clearCart();
+    } catch (err) {
+      console.error('Checkout error:', err);
+      toast.error('Something went wrong. Please try again.');
+      setIsSubmitting(false);
+    }
   };
 
+  useEffect(() => {
+    if (items.length === 0 && !navigatingToOrders) {
+      router.push(`/${slug}/cart`);
+    }
+  }, [items.length, navigatingToOrders, router, slug]);
+
   if (items.length === 0) {
-    router.push(`/${slug}/cart`);
     return null;
   }
 
@@ -150,7 +221,7 @@ export default function CheckoutPage({
             <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
           ) : (
             <>
-              Confirm & Generate QR
+              Confirm Order
               <span>✓</span>
             </>
           )}

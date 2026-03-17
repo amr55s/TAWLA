@@ -1,0 +1,114 @@
+version: "2"
+type: frontend
+tech_stack:
+  - TypeScript
+  - Next.js
+  - React
+  - Tailwind CSS
+  - Framer Motion
+  - Zustand
+  - Supabase
+routes:
+  - path: /
+    file: src/app/page.tsx
+    auth_required: false
+    description: Landing or redirect
+  - path: /login
+    file: src/app/login/page.tsx
+    auth_required: false
+    description: User login with email and password
+  - path: /[slug]
+    file: src/app/[slug]/page.tsx
+    auth_required: false
+    description: Restaurant table entry (enter table number)
+  - path: /[slug]/menu
+    file: src/app/[slug]/menu/page.tsx
+    auth_required: false
+    description: Menu browse and add to cart
+  - path: /[slug]/cart
+    file: src/app/[slug]/cart/page.tsx
+    auth_required: false
+    description: Cart review
+  - path: /[slug]/checkout
+    file: src/app/[slug]/checkout/page.tsx
+    auth_required: false
+    description: Checkout and place order
+  - path: /[slug]/qr
+    file: src/app/[slug]/qr/page.tsx
+    auth_required: false
+    description: Order confirmation QR page
+  - path: /admin
+    file: src/app/admin/page.tsx
+    auth_required: true
+    description: Admin dashboard
+  - path: /admin/menu
+    file: src/app/admin/menu/page.tsx
+    auth_required: true
+    description: Admin menu item CRUD
+  - path: /admin/settings
+    file: src/app/admin/settings/page.tsx
+    auth_required: true
+    description: Admin settings
+  - path: /[slug]/cashier
+    file: src/app/[slug]/cashier/page.tsx
+    auth_required: true
+    description: Cashier hall overview and orders
+features:
+  - name: Guest Ordering Flow
+    description: Navigate to menu with table, add item to cart, go to checkout, place order
+    files:
+      - src/app/[slug]/menu/page.tsx
+      - src/app/[slug]/checkout/page.tsx
+      - src/store/cart.ts
+      - src/lib/data/orders.client.ts
+    entry_route: /susushi/menu?table=1
+    user_interactions:
+      - See menu items on page
+      - Click add to cart on a menu item
+      - Navigate to checkout
+      - Click place order / Confirm and Generate QR
+      - Land on QR confirmation page
+    api_calls:
+      - method: RPC/client
+        endpoint: Supabase getRestaurantBySlugClient getTableByNumberClient createOrderWithItemsClient
+    auth_required: false
+  - name: Admin Login and Create Menu Item
+    description: Login as admin, go to admin menu, create a new menu item
+    files:
+      - src/app/login/page.tsx
+      - src/app/admin/page.tsx
+      - src/app/admin/menu/page.tsx
+    entry_route: /login
+    user_interactions:
+      - Fill email input (admin credentials)
+      - Fill password input
+      - Click Sign in
+      - Redirect to /admin
+      - Navigate to /admin/menu
+      - Click Add Item
+      - Fill item name and price and category
+      - Click Create item
+      - See new item in list
+    api_calls:
+      - method: POST
+        endpoint: Supabase auth signInWithPassword
+      - method: INSERT
+        endpoint: Supabase menu_items
+    auth_required: true
+  - name: Staff RBAC Cashier Redirect
+    description: Login as cashier and verify redirect to restaurant cashier page
+    files:
+      - src/app/login/page.tsx
+      - src/app/[slug]/cashier/page.tsx
+    entry_route: /login
+    user_interactions:
+      - Fill email (cashier credentials)
+      - Fill password
+      - Click Sign in
+      - System redirects to /[slug]/cashier (e.g. /susushi/cashier)
+      - See cashier/hall overview heading
+    api_calls:
+      - method: POST
+        endpoint: Supabase auth signInWithPassword
+    auth_required: true
+known_limitations: []

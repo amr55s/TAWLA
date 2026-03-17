@@ -1,51 +1,25 @@
 'use client';
 
 import * as React from 'react';
-import { useMemo } from 'react';
+import { Suspense } from 'react';
 import { useRouter } from 'next/navigation';
-import { QRCodeSVG } from 'qrcode.react';
 import { motion } from 'framer-motion';
 import { useCartStore } from '@/store/cart';
 
-export default function QRPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+function SuccessContent({ slug }: { slug: string }) {
   const router = useRouter();
-  const { slug } = React.use(params);
-
-  const { items, tableNumber, getTotal, clearCart } = useCartStore();
-  const total = getTotal(10);
-
-  const orderId = useMemo(() => {
-    return `#ORD-${Math.floor(1000 + Math.random() * 9000)}`;
-  }, []);
-
-  const qrData = useMemo(() => {
-    return JSON.stringify({
-      restaurantSlug: slug,
-      tableNumber: tableNumber,
-      orderId: orderId,
-      timestamp: Date.now(),
-      items: items.map(item => ({
-        id: item.menuItem.id,
-        name: item.menuItem.name_en,
-        quantity: item.quantity,
-        price: item.menuItem.price,
-        specialRequests: item.specialRequests,
-      })),
-      total: total,
-    });
-  }, [slug, tableNumber, orderId, items, total]);
+  const { clearCart } = useCartStore();
 
   const handleDone = () => {
     clearCart();
     router.push(`/${slug}/menu`);
   };
 
-  const handleModify = () => {
-    router.push(`/${slug}/cart`);
+  const handleViewOrders = () => {
+    // Optionally clear cart if they are viewing orders, 
+    // but typically they might just want to check status.
+    clearCart();
+    router.push(`/${slug}/orders`);
   };
 
   return (
@@ -54,10 +28,15 @@ export default function QRPage({
       <motion.div
         initial={{ opacity: 0, scale: 0.5 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4 }}
-        className="text-5xl mb-4"
+        transition={{ 
+          type: "spring",
+          stiffness: 260,
+          damping: 20,
+          duration: 0.6 
+        }}
+        className="text-7xl mb-6 drop-shadow-sm"
       >
-        ✅
+        🚀
       </motion.div>
 
       {/* Title */}
@@ -65,48 +44,21 @@ export default function QRPage({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.1 }}
-        className="text-2xl font-bold text-text-heading mb-2"
+        className="text-3xl font-black text-text-heading mb-3 tracking-tight"
       >
-        Your order is ready!
+        Order Sent Successfully!
       </motion.h1>
 
-      {/* Subtitle */}
-      <motion.p
+      {/* Subtitle Card */}
+      <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.15 }}
-        className="text-text-muted text-sm mb-2"
+        className="bg-primary/5 border border-primary/20 p-5 rounded-2xl mb-10 max-w-sm"
       >
-        Show this code to your waiter to confirm
-      </motion.p>
-
-      {/* Order ID */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.3, delay: 0.2 }}
-        className="inline-block bg-background-card px-5 py-2 rounded-full text-sm font-semibold text-primary mb-6"
-        style={{ direction: 'ltr' }}
-      >
-        {orderId}
-      </motion.div>
-
-      {/* QR Code Box */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5, delay: 0.25 }}
-        className="bg-white rounded-3xl p-6 shadow-float mb-8"
-        style={{ width: '220px', height: '220px' }}
-      >
-        <QRCodeSVG
-          value={qrData}
-          size={172}
-          level="H"
-          bgColor="transparent"
-          fgColor="#2D2D2D"
-          includeMargin={false}
-        />
+        <p className="text-text-body text-sm leading-relaxed font-medium">
+          Please wait, your waiter has been notified and will be at your table shortly to confirm your order.
+        </p>
       </motion.div>
 
       {/* Action Buttons */}
@@ -114,17 +66,18 @@ export default function QRPage({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.4 }}
-        className="flex gap-3 w-full max-w-xs"
+        className="flex flex-col gap-3 w-full max-w-xs"
       >
         <button
-          onClick={handleModify}
-          className="flex-1 py-3 bg-background-card rounded-2xl text-sm font-semibold text-text-body transition-colors active:bg-border-light"
+          onClick={handleViewOrders}
+          className="w-full py-4 bg-primary rounded-2xl text-base font-bold text-white shadow-primary transition-transform active:scale-95 flex items-center justify-center gap-2"
         >
-          🔙 Back to Menu
+          View Order Status
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
         </button>
         <button
           onClick={handleDone}
-          className="flex-1 py-3 bg-primary rounded-2xl text-sm font-semibold text-white transition-colors active:bg-primary/90"
+          className="w-full py-4 bg-background-card border border-border-light rounded-2xl text-base font-semibold text-text-body transition-transform active:scale-95"
         >
           New Order ✨
         </button>
@@ -137,11 +90,29 @@ export default function QRPage({
         transition={{ duration: 0.4, delay: 0.5 }}
         className="fixed bottom-8 text-center"
       >
-        <p className="text-xl font-bold text-primary tracking-wider">SU SUSHI</p>
+        <p className="text-xl font-bold text-primary tracking-wider">TAWLA</p>
         <p className="text-[10px] text-text-muted tracking-widest uppercase mt-1">
-          Digital Menu
+          Digital Table
         </p>
       </motion.div>
     </div>
+  );
+}
+
+export default function OrderSuccessPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = React.use(params);
+
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+      </div>
+    }>
+      <SuccessContent slug={slug} />
+    </Suspense>
   );
 }

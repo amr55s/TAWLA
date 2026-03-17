@@ -33,7 +33,7 @@ export async function createOrder(input: CreateOrderInput): Promise<Order | null
     .single();
   
   if (error) {
-    console.error('Error creating order:', error);
+    console.error('Error creating order:', JSON.stringify(error, null, 2), error);
     return null;
   }
   
@@ -48,7 +48,7 @@ export async function createOrderItems(items: CreateOrderItemInput[]): Promise<O
     .select();
   
   if (error) {
-    console.error('Error creating order items:', error);
+    console.error('Error creating order items:', JSON.stringify(error, null, 2), error);
     return [];
   }
   
@@ -65,7 +65,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
     .single();
   
   if (error) {
-    console.error('Error updating order status:', error);
+    console.error('Error updating order status:', JSON.stringify(error, null, 2), error);
     return null;
   }
   
@@ -81,7 +81,7 @@ export async function getOrderById(orderId: string): Promise<Order | null> {
     .single();
   
   if (error) {
-    console.error('Error fetching order:', error);
+    console.error('Error fetching order:', JSON.stringify(error, null, 2), error);
     return null;
   }
   
@@ -98,7 +98,7 @@ export async function getOrderWithItems(orderId: string): Promise<(Order & { ite
     .single();
   
   if (orderError || !order) {
-    console.error('Error fetching order:', orderError);
+    console.error('Error fetching order:', JSON.stringify(orderError, null, 2), orderError);
     return null;
   }
   
@@ -108,7 +108,7 @@ export async function getOrderWithItems(orderId: string): Promise<(Order & { ite
     .eq('order_id', orderId);
   
   if (itemsError) {
-    console.error('Error fetching order items:', itemsError);
+    console.error('Error fetching order items:', JSON.stringify(itemsError, null, 2), itemsError);
     return { ...order, items: [] };
   }
   
@@ -131,7 +131,7 @@ export async function getOrdersByRestaurant(restaurantId: string, status?: Order
   const { data, error } = await query;
   
   if (error) {
-    console.error('Error fetching orders:', error);
+    console.error('Error fetching orders:', JSON.stringify(error, null, 2), error);
     return [];
   }
   
@@ -144,11 +144,11 @@ export async function getActiveOrdersByRestaurant(restaurantId: string): Promise
     .from('orders')
     .select('*')
     .eq('restaurant_id', restaurantId)
-    .in('status', ['confirmed_by_waiter', 'in_kitchen', 'ready'])
+    .in('status', ['confirmed', 'preparing', 'served', 'confirmed_by_waiter', 'in_kitchen', 'ready'])
     .order('created_at', { ascending: true });
   
   if (error) {
-    console.error('Error fetching active orders:', error);
+    console.error('Error fetching active orders:', JSON.stringify(error, null, 2), error);
     return [];
   }
   
@@ -166,7 +166,7 @@ export async function getOrderItemsWithDetails(orderId: string) {
     .eq('order_id', orderId);
   
   if (error) {
-    console.error('Error fetching order items with details:', error);
+    console.error('Error fetching order items with details:', JSON.stringify(error, null, 2), error);
     return [];
   }
   

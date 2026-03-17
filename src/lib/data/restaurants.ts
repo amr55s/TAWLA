@@ -8,7 +8,7 @@ export const getRestaurantBySlug = cache(async (slug: string): Promise<Restauran
     .from('restaurants')
     .select('*')
     .eq('slug', slug)
-    .single();
+    .maybeSingle();
   
   if (error) {
     console.error('Error fetching restaurant:', error);
