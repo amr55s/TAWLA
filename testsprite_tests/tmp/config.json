@@ -8,13 +8,16 @@
   "executionArgs": {
     "projectName": "Tawla",
     "projectPath": "/Volumes/ex mac/dev/Tawla",
-    "testIds": [],
-    "additionalInstruction": "Run these 3 flows and report results: (1) Guest Ordering: go to /susushi/menu?table=1, find a menu item, add to cart, go to checkout, place order; assert success. (2) Admin Creation: go to /login, log in with admin credentials, go to /admin/menu, create a new menu item; assert item is created. (3) Staff RBAC: go to /login, log in with cashier credentials; assert redirect to /susushi/cashier.",
-    "serverMode": "development",
+    "testIds": [
+      "TC001",
+      "TC007"
+    ],
+    "additionalInstruction": "Only execute the specified test IDs. Use existing frontend test plan artifacts. Produce final report.",
+    "serverMode": "production",
     "envs": {
       "API_KEY": "sk-user-D7eYPfAT8Q0kUg9o7zonV2If2XQUgmhVejKNHFobLRJjdwtJL4rn5sQcMwKZTWSOaPkKsnzq3zsXUGwLP4VioOW1nVxxMaZ_2HzhTwtqOqolAwkX1N2B6E38dehDnyzNrg8"
     }
   },
-  "serverPort": 51415,
-  "proxy": "http://2bd0c887-321c-4211-945d-d019d88c9dd1:s3bEFPGsExTu2pzC81OfnPaRqqE5WzrL@tun.testsprite.com:8080"
+  "serverPort": 61828,
+  "proxy": "http://f6714f4a-ee16-4788-aa4c-7f00b462ace1:xdasuvjqjo4hwiAblac5zqViTK3TtTOf@tun.testsprite.com:8080"
 }

@@ -1,16 +1,27 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const PROTECTED_PREFIXES = ['/admin', '/login'];
-const PROTECTED_SUFFIXES = ['/cashier', '/waiter'];
+const AUTH_ROUTES = ['/login', '/register', '/onboarding'];
 
-function isProtectedRoute(pathname: string): boolean {
-  if (PROTECTED_PREFIXES.some((p) => pathname.startsWith(p))) return true;
-  return PROTECTED_SUFFIXES.some((s) => pathname.includes(s));
+function isAdminRoute(pathname: string): boolean {
+  // Match /:slug/admin or /:slug/admin/*
+  return /^\/[^/]+\/admin(\/|$)/.test(pathname);
 }
 
-function isLoginRoute(pathname: string): boolean {
-  return pathname === '/login';
+function isStaffRoute(pathname: string): boolean {
+  return pathname.includes('/cashier') || pathname.includes('/waiter');
+}
+
+function isProtectedRoute(pathname: string): boolean {
+  return isAdminRoute(pathname) || isStaffRoute(pathname);
+}
+
+function isAuthRoute(pathname: string): boolean {
+  return AUTH_ROUTES.some((r) => pathname === r);
+}
+
+function isPublicRedirectRoute(pathname: string): boolean {
+  return pathname === '/';
 }
 
 export async function middleware(request: NextRequest) {
@@ -43,45 +54,39 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  if (isLoginRoute(pathname) && user) {
-    const role = user.user_metadata?.role as string | undefined;
-    if (role === 'admin') {
-      return NextResponse.redirect(new URL('/admin', request.url));
+  // ── Authenticated users visiting auth/public routes → redirect to /{slug}/admin ──
+  if (user && (isAuthRoute(pathname) || isPublicRedirectRoute(pathname))) {
+    // Resolve slug for redirect
+    const { data: restaurant } = await supabase
+      .from('restaurants')
+      .select('slug')
+      .eq('owner_id', user.id)
+      .maybeSingle();
+
+    if (restaurant?.slug) {
+      return NextResponse.redirect(new URL(`/${restaurant.slug}/admin`, request.url));
     }
-
-    if (role === 'cashier' || role === 'waiter') {
-      const restaurantId = user.user_metadata?.restaurant_id as string | undefined;
-      if (restaurantId) {
-        const { data: restaurant } = await supabase
-          .from('restaurants')
-          .select('slug')
-          .eq('id', restaurantId)
-          .maybeSingle();
-
-        if (restaurant?.slug) {
-          return NextResponse.redirect(new URL(`/${restaurant.slug}/${role}`, request.url));
-        }
-      }
+    // If no restaurant yet (new user), send to onboarding
+    if (isPublicRedirectRoute(pathname)) {
+      return NextResponse.redirect(new URL('/onboarding', request.url));
     }
-
-    return NextResponse.redirect(new URL('/', request.url));
   }
 
-  if (isProtectedRoute(pathname) && !isLoginRoute(pathname) && !user) {
+  // ── Unauthenticated users on protected routes → redirect to /login ──
+  if (isProtectedRoute(pathname) && !user) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirectTo', pathname);
     return NextResponse.redirect(url);
   }
 
-  // Role-based route enforcement: waiter cannot access /cashier and vice versa.
-  if (user && !isLoginRoute(pathname)) {
+  // ── Role-based route enforcement ──
+  if (user && !isAuthRoute(pathname)) {
     const role = user.user_metadata?.role as string | undefined;
     const isCashierRoute = pathname.includes('/cashier');
     const isWaiterRoute = pathname.includes('/waiter');
 
     if ((isCashierRoute && role === 'waiter') || (isWaiterRoute && role === 'cashier')) {
-      // Extract slug from the path (e.g. /my-restaurant/cashier -> my-restaurant)
       const segments = pathname.split('/').filter(Boolean);
       const slug = segments.length > 0 ? segments[0] : '';
       if (slug) {
@@ -96,8 +101,11 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/admin/:path*',
+    '/',
+    '/register',
+    '/onboarding',
     '/login',
+    '/:slug/admin/:path*',
     '/:slug/cashier/:path*',
     '/:slug/waiter/:path*',
   ],

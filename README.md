@@ -1,193 +1,80 @@
-# Tawla — Su Sushi Digital Menu
+# Tawla - Restaurant Intelligence Platform
 
-تطبيق ويب لمنيو رقمي لمطعم **Su Sushi** (سو سوشي)، مبني بـ Next.js و Supabase. يدعم تجربة الضيف (المنيو، السلة، QR)، والويتر (المسح والتأكيد)، والكاشير/المطبخ (لوحة الطلبات).
+**Tawla** is a fluid, multi-tenant restaurant management ecosystem built natively for modern operations. Tawla empowers restaurant owners with a centralized system, bridging the physical and digital gap through QR code menus, automated real-time dashboards, and agentic workflows.
 
----
+## 🚀 Key Features
 
-## التقنيات المستخدمة (Tech Stack)
+- **Multi-Tenant B2B SaaS**: Completely scalable architecture. Every restaurant operates in a highly isolated environment mapped directly to its owner.
+- **Agentic / Autonomous Optimization**: Built out as a forward-thinking application utilizing autonomous processes.
+- **GSAP-Powered Interactive UI**: Stunning Landing Page featuring advanced micro-interactions, floating elements, and premium Glassmorphism design aesthetics.
+- **Bilingual Support**: Full localized compatibility in English & Arabic natively utilizing the Inter and IBM Plex Sans Arabic font families.
+- **Complete Admin Dashboard**: A comprehensive management suite providing complete operational control over staff, menu categories, physical tables, active orders, and live analytics.
 
-| الطبقة | التقنية |
-|--------|---------|
-| **Framework** | Next.js 16 (App Router) |
-| **اللغة** | TypeScript |
-| **التنسيق** | Tailwind CSS v4 |
-| **الحركات** | Framer Motion |
-| **إدارة الحالة** | Zustand (سلة الضيف) |
-| **قاعدة البيانات والـ Backend** | Supabase (PostgreSQL, Auth, Realtime) |
-| **QR** | qrcode.react, html5-qrcode |
+## 🛠️ Tech Stack
 
----
+Tawla is constructed using an elite, modern Typescript stack focusing on performance and data synchronicity.
 
-## الهوية والثيم (Su Sushi)
+- **Frontend**: Next.js 16 (App Router), React 18, Tailwind CSS v4, Framer Motion, GSAP.
+- **Backend & Auth**: Supabase (PostgreSQL, Supabase Auth, Storage, Real-time Subscriptions).
+- **State Management**: React Context (`RestaurantContext`) for strict frontend tenant isolation and Zustand for isolated guest carts.
+- **Database Deployment**: Supabase CLI (Migration-driven).
 
-- **الاسم:** Su Sushi
-- **اللون الأساسي:** أخضر غامق `#1B4332`
-- **الثانوي:** خشب/خيزران `#C4956A`
-- **الخلفية:** كريمي `#FAF8F5`
-- **العملة:** دينار كويتي (KWD) — 3 منازل عشرية
-- **الخطوط:** Plus Jakarta Sans (EN), Tajawal (AR)
-- **دعم RTL/LTR:** عربي وإنجليزي عبر Tailwind logical properties
+## 🏢 Multi-Tenant Architecture
 
----
+Tawla operates entirely on a strictly enforced multi-tenant architecture pattern. 
+Every data cluster is explicitly bound to a tenant (the restaurant owner). 
 
-## ما تم تنفيذه
+### The Tenant Record & Security
+- **The Core Constraint**: Every restaurant is tied to a user entity via an `owner_id` (linking to `auth.users`).
+- **Data Isolation**: Subordinate tables (`restaurant_staff`, `tables`, `orders`, `menu_items`) extend downwards originating strictly from a `restaurant_id`.
+- **Row Level Security (RLS)**: **Absolute data isolation.** PostgreSQL RLS policies guarantee that a user cannot query or mutate records unless the operations map explicitly back to their `owner_id` or an assigned active `restaurant_staff` scope. 
 
-### 1. الصفحة الرئيسية والتدفق الواحد
+*(For a deep dive into the Database Schema, Context bindings, and advanced Realtime streams, see [ARCHITECTURE.md](./ARCHITECTURE.md))*
 
-- `/` يعيد التوجيه مباشرة إلى `/susushi`.
-- التطبيق حالياً لمطعم واحد: Su Sushi (slug: `susushi`).
+## 💻 The Development Workflow (CRITICAL)
 
-### 2. تجربة الضيف (Guest)
+To maintain schema synchronicity and operational integrity, all database iterations MUST strictly flow through the **Supabase CLI**. We adhere strictly to a **Zero Mock Data policy** in the frontend components.
 
-| الصفحة | المسار | الوظيفة |
-|--------|--------|---------|
-| **إدخال رقم الطاولة** | `/susushi` | شاشة ترحيب، نumpad لإدخال رقم الطاولة، زر "View Menu". |
-| **المنيو** | `/susushi/menu` | تصنيفات (أ pills)، بحث، شبكة بطاقات أطباق (2 أعمدة موبايل، 3–4 لاحقاً)، زر إضافة للسلة. |
-| **البحث** | `/susushi/search` | بحث فوري بالاسم (عربي/إنجليزي) والوصف، نفس بطاقات المنيو. |
-| **السلة** | `/susushi/cart` | قائمة عناصر، +/- للكمية، ملخص (فرعي، خدمة 10%، إجمالي)، زر "Proceed to Checkout". |
-| **الدفع/التأكيد** | `/susushi/checkout` | ملخص الطلب، طلبات خاصة، إجمالي، زر "Place Order" (بدون خيارات دفع — الدفع عند الكاشير). |
-| **QR الطلب** | `/susushi/qr` | عرض QR يحتوي بيانات الطلب؛ "Show to waiter"، أزرار "Done" / "Modify Order". |
+1. **NO UI-First Mocks**: Every list, interaction, or metric displayed in the frontend MUST be dynamically mapped to a live Supabase query.
+2. **Schema CLI Migrations**: Do NOT use the Supabase Dashboard UI to make raw structure changes.
+   - Run: `npx supabase migration new <name_of_migration>`
+   - Write standard SQL changes inside the generated `supabase/migrations/` file.
+   - Run: `npx supabase db push` to push the schema up safely.
 
-- **سلة الضيف:** Zustand (`src/store/cart.ts`) — عناصر، كميات، إجماليات، رقم الطاولة، slug المطعم.
-- **بطاقة الطبق (DishCard):** صورة، اسم، وصف (محدود)، سعر KD، زر +. دعم فتح ورقة تفاصيل (ItemDetailSheet) للكمية ثم الإضافة.
-- **شريط التنقل السفلي (FloatingNavBar):** Menu، Search، Cart مع أيقونات وbadge لعدد السلة؛ يظهر في المنيو، البحث، السلة، الدفع، QR.
+## ⚙️ Local Setup Instructions
 
-### 3. تجربة الويتر (Waiter)
-
-| الصفحة | المسار | الوظيفة |
-|--------|--------|---------|
-| **داشبورد الطاولات** | `/susushi/waiter` | شبكة طاولات وحالاتها. |
-| **مسح QR** | `/susushi/waiter/scan` | مسح QR الذي يولّده الضيف. |
-| **تأكيد الطلب** | `/susushi/waiter/confirm` | مراجعة الطلب الممسوح، زر "Confirm & Send to Kitchen"، إنشاء الطلب في Supabase. |
-
-### 4. تجربة الكاشير/المطبخ (Cashier)
-
-| الصفحة | المسار | الوظيفة |
-|--------|--------|---------|
-| **لوحة الطلبات (Kanban)** | `/susushi/cashier` | أعمدة (مثلاً: New, Preparing, Ready)، بطاقات طلبات، نقل بين الأعمدة، تحديثات Realtime عبر Supabase. |
-
----
-
-## هيكل المشروع (ملخص)
-
-```
-src/
-├── app/
-│   ├── page.tsx                 # redirect → /susushi
-│   ├── layout.tsx               # Root layout, metadata, fonts
-│   ├── globals.css              # ثيم Su Sushi، متغيرات CSS، RTL
-│   └── [slug]/
-│       ├── layout.tsx           # RestaurantLayout (يجلب المطعم حسب slug)
-│       ├── page.tsx             # إدخال رقم الطاولة
-│       ├── menu/page.tsx        # المنيو + بحث + شبكة أطباق
-│       ├── search/page.tsx      # صفحة البحث
-│       ├── cart/page.tsx        # السلة
-│       ├── checkout/page.tsx    # تأكيد الطلب
-│       ├── qr/page.tsx          # عرض QR الطلب
-│       ├── waiter/page.tsx      # داشبورد الويتر
-│       ├── waiter/scan/page.tsx # مسح QR
-│       ├── waiter/confirm/page.tsx # تأكيد الطلب
-│       └── cashier/page.tsx     # Kanban الكاشير
-├── components/ui/               # Button, DishCard, CartItemCard, FloatingNavBar,
-│                                # CategoryTabs, BottomSheet, ItemDetailSheet,
-│                                # NumericKeypad, PageHeader, BackButton
-├── store/cart.ts                # Zustand: سلة الضيف
-├── lib/
-│   ├── supabase/client.ts       # Supabase client (browser)
-│   ├── supabase/server.ts        # Supabase server
-│   ├── data/restaurants.ts      # جلب المطعم (server)
-│   ├── data/orders.ts           # الطلبات (server)
-│   └── data/orders.client.ts    # جلب المطعم/التصنيفات/المنيو (client)
-└── types/database.ts            # أنواع Restaurant, Category, MenuItem, Order, ...
+### 1. Repository & Installation
+Clone the repository and install all node modules.
+```bash
+git clone <repository_url>
+cd Tawla
+npm install
 ```
 
----
+### 2. Connect Supabase
+Launch the Supabase CLI linking wizard to bind your local instance to your remote Supabase project.
+```bash
+npx supabase link --project-ref your-project-ref
+```
+*You will need your Database password.*
 
-## قاعدة البيانات (Supabase)
+### 3. Sync Database State
+Push any pending migrations to ensure your local database matches the tracked schema files.
+```bash
+npx supabase db push
+```
 
-- **الجداول (من `docs/Database-Schema.md` و migration):**  
-  `restaurants`, `categories`, `menu_items`, `tables`, `orders`, `order_items`, `waiter_calls`.
-- **البيانات الافتراضية:** ملف `supabase/seed/seed_data.sql` يدرج:
-  - مطعم **Su Sushi** (slug: `susushi`).
-  - 3 تصنيفات: Appetizers، Salads، Sushi & Maki.
-  - عشرات عناصر المنيو مع أسعار KWD ووصف عربي/إنجليزي وروابط صور (محلي `/menu/...` أو Unsplash).
-  - جداول الطاولات.
+### 4. Environment Variables
+Duplicate the example ENV file or create a `.env.local` containing the Supabase keys acquired from the remote project settings.
 
-**تشغيل الـ seed (مهم لتجنب 404 على `/susushi`):**
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://[YOUR_REF].supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsIn...
+```
 
-1. افتح [Supabase Dashboard](https://supabase.com/dashboard) → مشروعك.
-2. **SQL Editor** → انسخ محتوى `supabase/seed/seed_data.sql`.
-3. نفّذ الـ script (Run).
-
-بدون تشغيل الـ seed، صفحة `/susushi` تعيد 404 مع رسالة "Error fetching restaurant".
-
----
-
-## الإعداد والتشغيل
-
-### المتطلبات
-
-- Node.js (مثلاً 18+)
-- مشروع Supabase مع تنفيذ migration الـ schema
-
-### خطوات الإعداد
-
-1. **استنساخ المشروع وتثبيت الحزم:**
-   ```bash
-   npm install
-   ```
-
-2. **إعداد متغيرات البيئة:**  
-   أنشئ `.env.local` في جذر المشروع:
-   ```env
-   NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-   ```
-
-3. **تشغيل الـ seed في Supabase** (كما في قسم قاعدة البيانات أعلاه).
-
-4. **تشغيل التطبيق:**
-   ```bash
-   npm run dev
-   ```
-   ثم افتح [http://localhost:3000](http://localhost:3000) (سيتم توجيهك إلى `/susushi`).
-
-### أوامر أخرى
-
-- `npm run build` — بناء الإنتاج
-- `npm run start` — تشغيل نسخة مبنية
-- `npm run lint` — فحص ESLint
-
----
-
-## روابط سريعة (بعد تشغيل الـ seed)
-
-| الدور | الرابط |
-|-------|--------|
-| **الضيف — بداية** | http://localhost:3000/susushi |
-| **المنيو** | http://localhost:3000/susushi/menu |
-| **البحث** | http://localhost:3000/susushi/search |
-| **السلة** | http://localhost:3000/susushi/cart |
-| **الويتر** | http://localhost:3000/susushi/waiter |
-| **مسح QR (ويتر)** | http://localhost:3000/susushi/waiter/scan |
-| **الكاشير** | http://localhost:3000/susushi/cashier |
-
----
-
-## الوثائق الداخلية
-
-- `docs/PRD.md` — متطلبات المنتج والأدوار (ضيف، ويتر، كاشير).
-- `docs/Database-Schema.md` — وصف جداول Supabase.
-- `docs/Design-System.md` — (إن وُجد) نظام التصميم والألوان.
-
----
-
-## ملاحظات
-
-- **Hydration mismatch:** إن ظهر تحذير يتعلق بـ `data-atm-ext-installed` أو `data-gptw` على `<body>`، غالباً من إضافات المتصفح وليس من الكود؛ التجربة في نافذة خاصة أو بعد تعطيل الإضافات تقلل التحذير.
-- **الصور:** عناصر المنيو تستخدم `image_url` من قاعدة البيانات (محلي من `public/menu/` أو Unsplash). تأكد من إعداد `next.config` لأي دومين خارجي للصور إن لزم.
-- **الدفع:** لا يختار الضيف طريقة دفع؛ الدفع يتم عند الكاشير فقط.
-
----
-
-تم توثيق كل ما تم الوصول إليه في المشروع حتى الآن في هذا الملف.
+### 5. Start Development Server
+Boot up the Next.js local server to run the full application.
+```bash
+npm run dev
+```
+Navigate to `http://localhost:3000` to view the application.

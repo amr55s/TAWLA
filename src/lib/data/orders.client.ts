@@ -1,268 +1,287 @@
-'use client';
+"use client";
 
-import { createClient } from '@/lib/supabase/client';
-import type { Order, OrderItem, OrderStatus, Table, Category, MenuItem, MenuItemWithCategory, Restaurant } from '@/types/database';
-import type { RealtimeChannel } from '@supabase/supabase-js';
+import { createClient } from "@/lib/supabase/client";
+import type {
+	MenuItem,
+	MenuItemWithCategory,
+	Order,
+	OrderStatus,
+	Restaurant,
+	Table,
+} from "@/types/database";
 
 const supabase = createClient();
 
-export async function getRestaurantBySlugClient(slug: string): Promise<Restaurant | null> {
-  const { data, error } = await supabase
-    .from('restaurants')
-    .select('*')
-    .eq('slug', slug)
-    .maybeSingle();
-  
-  if (error) {
-    console.error('Error fetching restaurant:', JSON.stringify(error, null, 2), error);
-    return null;
-  }
-  
-  return data as Restaurant;
+export async function getRestaurantBySlugClient(
+	slug: string,
+): Promise<Restaurant | null> {
+	const { data, error } = await supabase
+		.from("restaurants")
+		.select("id, name, slug, logo_url, theme_colors, created_at")
+		.eq("slug", slug)
+		.maybeSingle();
+
+	if (error) {
+		console.error(
+			"Error fetching restaurant:",
+			JSON.stringify(error, null, 2),
+			error,
+		);
+		return null;
+	}
+
+	return data as Restaurant;
 }
 
-export async function getCategoriesByRestaurantClient(restaurantId: string): Promise<Category[]> {
-  const { data, error } = await supabase
-    .from('categories')
-    .select('*')
-    .eq('restaurant_id', restaurantId)
-    .order('sort_order', { ascending: true });
-  
-  if (error) {
-    console.error('Error fetching categories:', JSON.stringify(error, null, 2), error);
-    return [];
-  }
-  
-  return (data as Category[]) || [];
+export async function getMenuItemsByRestaurantClient(
+	restaurantId: string,
+): Promise<MenuItemWithCategory[]> {
+	const { data: categoriesData, error: catError } = await supabase
+		.from("categories")
+		.select("id, name_en, name_ar, restaurant_id, sort_order, created_at")
+		.eq("restaurant_id", restaurantId);
+
+	if (catError || !categoriesData) {
+		console.error(
+			"Error fetching categories:",
+			JSON.stringify(catError, null, 2),
+			catError,
+		);
+		return [];
+	}
+
+	const categories = categoriesData as {
+		id: string;
+		name_en: string;
+		name_ar: string;
+		restaurant_id: string;
+		sort_order: number;
+	}[];
+	const categoryIds = categories.map((c) => c.id);
+
+	const { data: itemsData, error: itemsError } = await supabase
+		.from("menu_items")
+		.select("id, name_en, name_ar, description_en, description_ar, price, category_id, is_available, image_url, created_at, cross_sell_items")
+		.in("category_id", categoryIds)
+		.eq("is_available", true);
+
+	if (itemsError || !itemsData) {
+		console.error(
+			"Error fetching menu items:",
+			JSON.stringify(itemsError, null, 2),
+			itemsError,
+		);
+		return [];
+	}
+
+	const items = itemsData as MenuItem[];
+
+	return items.map((item) => ({
+		...item,
+		category: categories.find((c) => c.id === item.category_id)!,
+	}));
 }
 
-export async function getMenuItemsByRestaurantClient(restaurantId: string): Promise<MenuItemWithCategory[]> {
-  const { data: categoriesData, error: catError } = await supabase
-    .from('categories')
-    .select('*')
-    .eq('restaurant_id', restaurantId);
-  
-  if (catError || !categoriesData) {
-    console.error('Error fetching categories:', JSON.stringify(catError, null, 2), catError);
-    return [];
-  }
-  
-  const categories = categoriesData as Category[];
-  const categoryIds = categories.map(c => c.id);
-  
-  const { data: itemsData, error: itemsError } = await supabase
-    .from('menu_items')
-    .select('*')
-    .in('category_id', categoryIds)
-    .eq('is_available', true);
-  
-  if (itemsError || !itemsData) {
-    console.error('Error fetching menu items:', JSON.stringify(itemsError, null, 2), itemsError);
-    return [];
-  }
-  
-  const items = itemsData as MenuItem[];
-  
-  return items.map(item => ({
-    ...item,
-    category: categories.find(c => c.id === item.category_id)!,
-  }));
-}
+export async function getTablesByRestaurantClient(
+	restaurantId: string,
+): Promise<Table[]> {
+	const { data, error } = await supabase
+		.from("tables")
+		.select("id, restaurant_id, table_number, qr_code_data, qr_code_url")
+		.eq("restaurant_id", restaurantId)
+		.order("table_number", { ascending: true });
 
-export async function getActiveOrdersClient(restaurantId: string): Promise<Order[]> {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('*')
-    .eq('restaurant_id', restaurantId)
-    .in('status', [
-      'pending',
-      'confirmed',
-      'preparing',
-      'served',
-      // Backward compatibility for legacy rows.
-      'confirmed_by_waiter',
-      'in_kitchen',
-      'ready',
-    ])
-    .order('created_at', { ascending: true });
-  
-  if (error) {
-    console.error('Error fetching active orders:', JSON.stringify(error, null, 2), error);
-    return [];
-  }
-  
-  return (data as Order[]) || [];
-}
+	if (error) {
+		console.error(
+			"Error fetching tables:",
+			JSON.stringify(error, null, 2),
+			error,
+		);
+		return [];
+	}
 
-export async function getOrderItemsClient(orderId: string) {
-  const { data, error } = await supabase
-    .from('order_items')
-    .select(`
-      *,
-      menu_item:menu_items(name_en, name_ar)
-    `)
-    .eq('order_id', orderId);
-  
-  if (error) {
-    console.error('Error fetching order items:', JSON.stringify(error, null, 2), error);
-    return [];
-  }
-  
-  return data || [];
-}
-
-export async function updateOrderStatusClient(orderId: string, status: OrderStatus): Promise<boolean> {
-  const { error } = await supabase
-    .from('orders')
-    .update({ status })
-    .eq('id', orderId);
-  
-  if (error) {
-    console.error('Error updating order status:', JSON.stringify(error, null, 2), error);
-    return false;
-  }
-  
-  return true;
-}
-
-export async function getTablesByRestaurantClient(restaurantId: string): Promise<Table[]> {
-  const { data, error } = await supabase
-    .from('tables')
-    .select('*')
-    .eq('restaurant_id', restaurantId)
-    .order('table_number', { ascending: true });
-  
-  if (error) {
-    console.error('Error fetching tables:', JSON.stringify(error, null, 2), error);
-    return [];
-  }
-  
-  return (data as Table[]) || [];
-}
-
-export async function getTableByIdClient(tableId: string): Promise<Table | null> {
-  const { data, error } = await supabase
-    .from('tables')
-    .select('*')
-    .eq('id', tableId)
-    .single();
-  
-  if (error) {
-    console.error('Error fetching table:', JSON.stringify(error, null, 2), error);
-    return null;
-  }
-  
-  return data as Table;
-}
-
-export function subscribeToOrders(
-  restaurantId: string,
-  onInsert: (order: Order) => void,
-  onUpdate: (order: Order) => void
-): RealtimeChannel {
-  const channel = supabase
-    .channel(`orders-${restaurantId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'orders',
-        filter: `restaurant_id=eq.${restaurantId}`,
-      },
-      (payload) => {
-        onInsert(payload.new as Order);
-      }
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'orders',
-        filter: `restaurant_id=eq.${restaurantId}`,
-      },
-      (payload) => {
-        onUpdate(payload.new as Order);
-      }
-    )
-    .subscribe();
-  
-  return channel;
-}
-
-export function unsubscribeFromChannel(channel: RealtimeChannel) {
-  supabase.removeChannel(channel);
+	return (data as Table[]) || [];
 }
 
 export interface CreateOrderClientInput {
-  restaurant_id: string;
-  table_id: string;
-  total_amount: number;
-  special_requests?: string;
-  qr_code_data?: string;
-  guest_id?: string;
-  status?: OrderStatus;
-  items: {
-    menu_item_id: string;
-    quantity: number;
-    price_at_time: number;
-  }[];
+	restaurant_id: string;
+	table_id: string;
+	total_amount?: number;
+	special_requests?: string;
+	qr_code_data?: string;
+	guest_id?: string;
+	status?: OrderStatus;
+	items: {
+		menu_item_id: string;
+		quantity: number;
+		price_at_time?: number;
+	}[];
 }
 
-export async function createOrderWithItemsClient(input: CreateOrderClientInput): Promise<Order | null> {
-  const { data: orderData, error: orderError } = await supabase
-    .from('orders')
-    .insert({
-      restaurant_id: input.restaurant_id,
-      table_id: input.table_id,
-      total_amount: input.total_amount,
-      special_requests: input.special_requests,
-      qr_code_data: input.qr_code_data,
-      guest_id: input.guest_id || null,
-      // Guest orders must begin as pending and be confirmed by waiter later.
-      status: input.status || 'pending',
-    })
-    .select()
-    .single();
-  
-  if (orderError || !orderData) {
-    console.error('Error creating order:', JSON.stringify(orderError, null, 2), orderError);
-    return null;
-  }
-  
-  const order = orderData as Order;
-  
-  const orderItems = input.items.map(item => ({
-    order_id: order.id,
-    menu_item_id: item.menu_item_id,
-    quantity: item.quantity,
-    price_at_time: item.price_at_time,
-  }));
-  
-  const { error: itemsError } = await supabase
-    .from('order_items')
-    .insert(orderItems);
-  
-  if (itemsError) {
-    console.error('Error creating order items:', JSON.stringify(itemsError, null, 2), itemsError);
-  }
-  
-  return order;
+export async function createOrderWithItemsClient(
+	input: CreateOrderClientInput,
+): Promise<Order | null> {
+	if (!input.items.length) {
+		console.error("Error creating order: no items in payload");
+		return null;
+	}
+
+	const normalizedItems = input.items.map((item) => ({
+		menu_item_id: item.menu_item_id,
+		quantity: Number(item.quantity),
+	}));
+
+	if (
+		normalizedItems.some(
+			(item) =>
+				!item.menu_item_id ||
+				!Number.isInteger(item.quantity) ||
+				item.quantity <= 0,
+		)
+	) {
+		console.error("Error creating order: invalid item payload");
+		return null;
+	}
+
+	const uniqueItemIds = Array.from(
+		new Set(normalizedItems.map((item) => item.menu_item_id)),
+	);
+
+	const { data: categoriesData, error: categoriesError } = await supabase
+		.from("categories")
+		.select("id")
+		.eq("restaurant_id", input.restaurant_id);
+
+	if (categoriesError || !categoriesData?.length) {
+		console.error(
+			"Error fetching categories for secure pricing:",
+			JSON.stringify(categoriesError, null, 2),
+			categoriesError,
+		);
+		return null;
+	}
+
+	const categoryIds = categoriesData.map((category) => category.id);
+
+	const { data: menuItemsData, error: menuItemsError } = await supabase
+		.from("menu_items")
+		.select("id, price, is_available, category_id")
+		.in("id", uniqueItemIds)
+		.in("category_id", categoryIds);
+
+	if (menuItemsError || !menuItemsData) {
+		console.error(
+			"Error fetching menu items for secure pricing:",
+			JSON.stringify(menuItemsError, null, 2),
+			menuItemsError,
+		);
+		return null;
+	}
+
+	const menuItemMap = new Map(
+		menuItemsData
+			.filter((menuItem) => menuItem.is_available !== false)
+			.map((menuItem) => [menuItem.id, Number(menuItem.price)]),
+	);
+
+	if (uniqueItemIds.some((id) => !menuItemMap.has(id))) {
+		console.error(
+			"Error creating order: one or more items missing or unavailable",
+		);
+		return null;
+	}
+
+	const verifiedOrderItems = normalizedItems.map((item) => ({
+		menu_item_id: item.menu_item_id,
+		quantity: item.quantity,
+		price_at_time: menuItemMap.get(item.menu_item_id) as number,
+	}));
+
+	const verifiedTotalAmount = verifiedOrderItems.reduce(
+		(acc, item) => acc + item.price_at_time * item.quantity,
+		0,
+	);
+
+	const { data: orderData, error: orderError } = await supabase
+		.from("orders")
+		.insert({
+			restaurant_id: input.restaurant_id,
+			table_id: input.table_id,
+			total_amount: verifiedTotalAmount,
+			special_requests: input.special_requests,
+			qr_code_data: input.qr_code_data,
+			guest_id: input.guest_id || null,
+			// Guest orders must begin as pending and be confirmed by waiter later.
+			status: input.status || "pending",
+		})
+		.select()
+		.single();
+
+	if (orderError || !orderData) {
+		console.error(
+			"Error creating order:",
+			JSON.stringify(orderError, null, 2),
+			orderError,
+		);
+		return null;
+	}
+
+	const order = orderData as Order;
+
+	const orderItems = verifiedOrderItems.map((item) => ({
+		order_id: order.id,
+		menu_item_id: item.menu_item_id,
+		quantity: item.quantity,
+		price_at_time: item.price_at_time,
+	}));
+
+	const { error: itemsError } = await supabase
+		.from("order_items")
+		.insert(orderItems);
+
+	if (itemsError) {
+		console.error(
+			"Error creating order items:",
+			JSON.stringify(itemsError, null, 2),
+			itemsError,
+		);
+		const { error: rollbackError } = await supabase
+			.from("orders")
+			.delete()
+			.eq("id", order.id)
+			.eq("restaurant_id", input.restaurant_id);
+		if (rollbackError) {
+			console.error(
+				"Error rolling back order after items failure:",
+				JSON.stringify(rollbackError, null, 2),
+				rollbackError,
+			);
+		}
+		return null;
+	}
+
+	return { ...order, total_amount: verifiedTotalAmount };
 }
 
-export async function getTableByNumberClient(restaurantId: string, tableNumber: number): Promise<Table | null> {
-  const { data, error } = await supabase
-    .from('tables')
-    .select('*')
-    .eq('restaurant_id', restaurantId)
-    .eq('table_number', tableNumber)
-    .single();
-  
-  if (error) {
-    console.error('Error fetching table:', JSON.stringify(error, null, 2), error);
-    return null;
-  }
-  
-  return data as Table;
+export async function getTableByNumberClient(
+	restaurantId: string,
+	tableNumber: number,
+): Promise<Table | null> {
+	const { data, error } = await supabase
+		.from("tables")
+		.select("id, restaurant_id, table_number, qr_code_data, qr_code_url")
+		.eq("restaurant_id", restaurantId)
+		.eq("table_number", tableNumber)
+		.single();
+
+	if (error) {
+		console.error(
+			"Error fetching table:",
+			JSON.stringify(error, null, 2),
+			error,
+		);
+		return null;
+	}
+
+	return data as Table;
 }

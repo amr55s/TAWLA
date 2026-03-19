@@ -1,48 +1,48 @@
 @import "tailwindcss";
 
 :root {
-  /* Su Sushi Brand Colors */
-  --primary: #1B4332;
-  --primary-light: rgba(27, 67, 50, 0.1);
-  --primary-medium: rgba(27, 67, 50, 0.2);
-  --primary-shadow: rgba(27, 67, 50, 0.25);
+	/* Tawla Brand Colors */
+	--primary: #0f4c75;
+	--primary-light: rgba(15, 76, 117, 0.1);
+	--primary-medium: rgba(15, 76, 117, 0.2);
+	--primary-shadow: rgba(15, 76, 117, 0.25);
 
-  /* Secondary - Warm Wood/Bamboo */
-  --secondary: #C4956A;
-  --secondary-light: rgba(196, 149, 106, 0.15);
+	/* Secondary - Accent Sky Blue */
+	--secondary: #3282b8;
+	--secondary-light: rgba(50, 130, 184, 0.15);
 
-  /* Background Colors - Warm Off-white */
-  --background: #FAF8F5;
-  --background-card: #ffffff;
-  --background-glass: rgba(255, 255, 255, 0.6);
-  --background-glass-dark: rgba(255, 255, 255, 0.9);
+	/* Background Colors - Warm Off-white */
+	--background: #faf8f5;
+	--background-card: #ffffff;
+	--background-glass: rgba(255, 255, 255, 0.6);
+	--background-glass-dark: rgba(255, 255, 255, 0.9);
 
-  /* Text Colors */
-  --text-heading: #1a1a1a;
-  --text-body: #374151;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
-  --text-on-primary: #ffffff;
+	/* Text Colors */
+	--text-heading: #1a1a1a;
+	--text-body: #374151;
+	--text-secondary: #6b7280;
+	--text-muted: #9ca3af;
+	--text-on-primary: #ffffff;
 
-  /* Border Colors */
-  --border-light: #f3f4f6;
-  --border-medium: #e5e7eb;
-  --border-heavy: #d1d5db;
+	/* Border Colors */
+	--border-light: #f3f4f6;
+	--border-medium: #e5e7eb;
+	--border-heavy: #d1d5db;
 
-  /* Accent Colors */
-  --accent-gold: #d4a574;
-  --accent-gold-bg: rgba(212, 165, 116, 0.2);
+	/* Accent Colors */
+	--accent-gold: #d4a574;
+	--accent-gold-bg: rgba(212, 165, 116, 0.2);
 
-  /* Spacing */
-  --radius-sm: 8px;
-  --radius-md: 16px;
-  --radius-lg: 24px;
-  --radius-xl: 40px;
-  --radius-full: 9999px;
+	/* Spacing */
+	--radius-sm: 8px;
+	--radius-md: 16px;
+	--radius-lg: 24px;
+	--radius-xl: 40px;
+	--radius-full: 9999px;
 
-  /* Fonts */
-  --font-sans: var(--font-plus-jakarta-sans), system-ui, sans-serif;
-  --font-arabic: var(--font-tajawal), system-ui, sans-serif;
+	/* Fonts */
+	--font-sans: var(--font-plus-jakarta-sans), system-ui, sans-serif;
+	--font-arabic: var(--font-tajawal), system-ui, sans-serif;
 }
 
 @theme inline {
@@ -83,83 +83,149 @@
   /* Fonts */
   --font-sans: var(--font-plus-jakarta-sans), system-ui, sans-serif;
   --font-arabic: var(--font-tajawal), system-ui, sans-serif;
+  --font-display: var(--font-playfair-display), Georgia, 'Times New Roman', serif;
+
+  /* Tawla Landing Page Colors */
+  --color-tawla-deep: #0F4C75;
+  --color-tawla-dark: #0A3558;
+  --color-tawla-sky: #3282B8;
+  --color-tawla-ice: #BBE1FA;
+  --color-tawla-ice-light: #E8F4FD;
+  --color-tawla-ghost: #F0F7FC;
+  --color-tawla-ink: #0A1628;
+  --color-tawla-body-blue: #3D4F6F;
+  --color-tawla-muted: #7B8BA3;
+  --color-tawla-border: #D6E4F0;
 }
 
 /* Base styles */
 html {
-  scroll-behavior: smooth;
+	scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--text-body);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  overscroll-behavior-y: none;
+	background: var(--background);
+	color: var(--text-body);
+	font-family: var(--font-sans);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	overscroll-behavior-y: none;
 }
 
 /* RTL support */
 [dir="rtl"] body {
-  font-family: var(--font-arabic);
+	font-family: var(--font-arabic);
 }
 
 /* Glassmorphism utilities */
 .glass {
-  background: var(--background-glass);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+	background: var(--background-glass);
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
+	border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .glass-strong {
-  background: var(--background-glass-dark);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+	background: var(--background-glass-dark);
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
 }
 
 /* Hide scrollbar but allow scrolling */
 .scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+	-ms-overflow-style: none;
+	scrollbar-width: none;
 }
 
 .scrollbar-hide::-webkit-scrollbar {
-  display: none;
+	display: none;
 }
 
 /* Safe area padding for mobile */
 .safe-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 0);
+	padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
 .safe-top {
-  padding-top: env(safe-area-inset-top, 0);
+	padding-top: env(safe-area-inset-top, 0);
 }
 
-/* Su Sushi specific utilities */
+/* Tawla specific utilities */
 .bg-wood {
-  background: linear-gradient(135deg, #C4956A 0%, #b8895e 100%);
+	background: linear-gradient(135deg, #c4956a 0%, #b8895e 100%);
 }
 
 .text-wood {
-  color: var(--secondary);
+	color: var(--secondary);
 }
 
 /* Print styles for invoice */
 @media print {
-  body * {
-    visibility: hidden !important;
-  }
-  #invoice-print,
-  #invoice-print * {
-    visibility: visible !important;
-  }
-  #invoice-print {
-    display: block !important;
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-  }
+	body * {
+		visibility: hidden !important;
+	}
+	#invoice-print,
+	#invoice-print * {
+		visibility: visible !important;
+	}
+	#invoice-print {
+		display: block !important;
+		position: absolute;
+		left: 0;
+		top: 0;
+		width: 100%;
+	}
+}
+
+/* ═══ Tawla Landing Page Animations ═══ */
+@keyframes tawla-float-1 {
+	0%,
+	100% {
+		transform: translateY(0) rotate(-1.5deg);
+	}
+	50% {
+		transform: translateY(-18px) rotate(1deg);
+	}
+}
+@keyframes tawla-float-2 {
+	0%,
+	100% {
+		transform: translateY(0) rotate(1deg);
+	}
+	50% {
+		transform: translateY(-22px) rotate(-1.5deg);
+	}
+}
+@keyframes tawla-float-3 {
+	0%,
+	100% {
+		transform: translateY(0) rotate(1.5deg);
+	}
+	50% {
+		transform: translateY(-14px) rotate(-1deg);
+	}
+}
+@keyframes tawla-pulse {
+	0%,
+	100% {
+		opacity: 0.4;
+		transform: scale(1);
+	}
+	50% {
+		opacity: 1;
+		transform: scale(1.2);
+	}
+}
+
+.tawla-float-1 {
+	animation: tawla-float-1 6s ease-in-out infinite;
+}
+.tawla-float-2 {
+	animation: tawla-float-2 7s ease-in-out infinite 0.5s;
+}
+.tawla-float-3 {
+	animation: tawla-float-3 5.5s ease-in-out infinite 1s;
+}
+.tawla-pulse {
+	animation: tawla-pulse 3s ease-in-out infinite;
 }

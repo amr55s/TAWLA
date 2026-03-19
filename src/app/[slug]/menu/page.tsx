@@ -1,31 +1,35 @@
-import { notFound } from 'next/navigation';
-import { getRestaurantBySlug, getCategoriesByRestaurant, getMenuItemsByRestaurant } from '@/lib/data/restaurants';
-import { MenuContentClient } from './MenuContentClient';
+import { notFound } from "next/navigation";
+import {
+	getCategoriesByRestaurant,
+	getMenuItemsByRestaurant,
+	getRestaurantBySlug,
+} from "@/lib/data/restaurants";
+import { MenuContentClient } from "./MenuContentClient";
 
 export default async function MenuPage({
-  params,
+	params,
 }: {
-  params: Promise<{ slug: string }>;
+	params: Promise<{ slug: string }>;
 }) {
-  const { slug } = await params;
+	const { slug } = await params;
 
-  const restaurant = await getRestaurantBySlug(slug);
+	const restaurant = await getRestaurantBySlug(slug);
 
-  if (!restaurant) {
-    notFound();
-  }
+	if (!restaurant) {
+		notFound();
+	}
 
-  const [categories, menuItems] = await Promise.all([
-    getCategoriesByRestaurant(restaurant.id),
-    getMenuItemsByRestaurant(restaurant.id),
-  ]);
+	const [categories, menuItems] = await Promise.all([
+		getCategoriesByRestaurant(restaurant.id),
+		getMenuItemsByRestaurant(restaurant.id),
+	]);
 
-  return (
-    <MenuContentClient
-      restaurant={restaurant}
-      categories={categories}
-      menuItems={menuItems}
-      slug={slug}
-    />
-  );
+	return (
+		<MenuContentClient
+			restaurant={restaurant}
+			categories={categories}
+			menuItems={menuItems}
+			slug={slug}
+		/>
+	);
 }

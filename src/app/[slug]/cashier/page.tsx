@@ -1,683 +1,1012 @@
-'use client';
+"use client";
 
-import * as React from 'react';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import { toast } from 'sonner';
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  getRestaurantBySlugClient,
-  getTablesByRestaurantClient,
-} from '@/lib/data/orders.client';
-import { createClient } from '@/lib/supabase/client';
-import { SkeletonInsightCard, SkeletonTableCard } from '@/components/ui';
-import type { Restaurant, Table } from '@/types/database';
+	Clock,
+	LogOut,
+	Minus,
+	Plus,
+	Printer,
+	Trash2,
+	UtensilsCrossed,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import posthog from "posthog-js";
+import * as React from "react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import {
+	getRestaurantBySlugClient,
+	getTablesByRestaurantClient,
+} from "@/lib/data/orders.client";
+import { createClient } from "@/lib/supabase/client";
+import type { Restaurant, Table } from "@/types/database";
 
 const supabase = createClient();
 
 interface OrderItem {
-  id: string;
-  name: string;
-  quantity: number;
-  price: number;
-  specialRequests?: string;
+	id: string;
+	name: string;
+	quantity: number;
+	price: number;
+	specialRequests?: string;
 }
 
 interface TableOrder {
-  id: string;
-  tableNumber: number;
-  status: string;
-  items: OrderItem[];
-  total: number;
-  createdAt: Date;
+	id: string;
+	tableNumber: number | null; // null for takeaway
+	status: string;
+	items: OrderItem[];
+	total: number;
+	createdAt: Date;
 }
 
-const CASHIER_ACTIVE_ORDER_STATUSES = ['confirmed', 'preparing', 'served', 'confirmed_by_waiter', 'in_kitchen', 'ready'] as const;
+const CASHIER_ACTIVE_ORDER_STATUSES = [
+	"confirmed",
+	"preparing",
+	"served",
+	"confirmed_by_waiter",
+	"in_kitchen",
+	"ready",
+] as const;
 const CLEARABLE_ORDER_STATUSES = [
-  ...CASHIER_ACTIVE_ORDER_STATUSES,
-  'pending',
-  'confirmed_by_waiter',
-  'in_kitchen',
-  'ready',
+	...CASHIER_ACTIVE_ORDER_STATUSES,
+	"pending",
+	"in_kitchen",
+	"ready",
 ] as const;
 
 interface DailyInsights {
-  totalRevenue: number;
-  totalOrders: number;
+	totalRevenue: number;
+	totalOrders: number;
+}
+
+// Generates a short order ID from UUID, e.g. "ORD-4A2F"
+function shortOrderId(uuid: string): string {
+	return "ORD-" + uuid.slice(-4).toUpperCase();
+}
+
+// -- New Order types --
+interface CartItem {
+	menuItemId: string;
+	name: string;
+	price: number;
+	quantity: number;
+}
+
+interface MenuCategory {
+	id: string;
+	name_en: string;
+}
+
+interface MenuItemRow {
+	id: string;
+	name_en: string;
+	price: number;
+	category_id: string;
+	is_available: boolean;
 }
 
 export default function CashierDashboardPage({
-  params,
+	params,
 }: {
-  params: Promise<{ slug: string }>;
+	params: Promise<{ slug: string }>;
 }) {
-  const router = useRouter();
-  const { slug } = React.use(params);
+	const router = useRouter();
+	const { slug } = React.use(params);
 
-  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
-  const [tables, setTables] = useState<Table[]>([]);
-  const [ordersByTableId, setOrdersByTableId] = useState<Map<string, TableOrder[]>>(new Map());
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedTable, setSelectedTable] = useState<Table | null>(null);
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [isMarkingPaid, setIsMarkingPaid] = useState(false);
-  const [isClearingTable, setIsClearingTable] = useState(false);
-  const [insights, setInsights] = useState<DailyInsights>({
-    totalRevenue: 0,
-    totalOrders: 0,
-  });
+	const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+	const [tables, setTables] = useState<Table[]>([]);
+	// We'll store orders by ID directly, or group by table. For takeaway, table is 'takeaway'
+	const [orders, setOrders] = useState<TableOrder[]>([]);
 
-  const fetchActiveOrders = React.useCallback(
-    async (restaurantId: string) => {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(
-          `
-          *,
-          table:tables!inner(id, table_number),
+	const [isLoading, setIsLoading] = useState(true);
+
+	// What is selected in the right panel? Either 'new_order' or an Order ID
+	const [activePane, setActivePane] = useState<"new_order" | string>(
+		"new_order",
+	);
+
+	const [isMarkingPaid, setIsMarkingPaid] = useState(false);
+	const [isClearingTable, setIsClearingTable] = useState(false);
+
+	const [insights, setInsights] = useState<DailyInsights>({
+		totalRevenue: 0,
+		totalOrders: 0,
+	});
+
+	// -- Order receipt / print state --
+	const [printOrder, setPrintOrder] = useState<TableOrder | null>(null);
+
+	// -- Menu Data (fetched once) --
+	const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
+	const [menuItems, setMenuItems] = useState<MenuItemRow[]>([]);
+	const [selectedCategory, setSelectedCategory] = useState<string>("all");
+
+	// -- Cart --
+	const [cart, setCart] = useState<CartItem[]>([]);
+	const [newOrderTable, setNewOrderTable] = useState<string>("takeaway");
+	const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+	const isSubmittingOrderRef = useRef(false);
+
+	// ───────────────── Data fetching ─────────────────
+
+	const fetchActiveOrders = React.useCallback(async (restaurantId: string) => {
+		const { data, error } = await supabase
+			.from("orders")
+			.select(`
+          id,
+          status,
+          total_amount,
+          created_at,
+          table:tables(id, table_number),
           items:order_items(
-            *,
-            menu_item:menu_items(*)
+            id,
+            quantity,
+            price_at_time,
+            special_requests,
+            menu_item:menu_items(id, name_en)
           )
-        `
-        )
-        .eq('restaurant_id', restaurantId)
-        .in('status', [...CASHIER_ACTIVE_ORDER_STATUSES])
-        .order('created_at', { ascending: true });
+        `)
+			.eq("restaurant_id", restaurantId)
+			.in("status", [...CASHIER_ACTIVE_ORDER_STATUSES])
+			.order("created_at", { ascending: false });
 
-      if (error || !data) {
-        console.error('Cashier orders fetch failed:', JSON.stringify(error, null, 2), error);
-        return new Map<string, TableOrder[]>();
-      }
+		if (error || !data) {
+			console.error(
+				"Cashier orders fetch failed:",
+				JSON.stringify(error, null, 2),
+			);
+			return [];
+		}
 
-      const map = new Map<string, TableOrder[]>();
-      for (const row of data as any[]) {
-        const tableNumber = row.table?.table_number ?? 0;
-        const tableId = row.table_id as string;
-        const items: OrderItem[] = (row.items || []).map((oi: any) => ({
-          id: oi.id,
-          name: oi.menu_item?.name_en ?? 'Unknown item',
-          quantity: oi.quantity,
-          price: oi.price_at_time,
-          specialRequests: oi.special_requests || undefined,
-        }));
+		const formattedOrders: TableOrder[] = data.map((row: any) => ({
+			id: row.id,
+			tableNumber: row.table?.table_number ?? null,
+			status: row.status,
+			total: row.total_amount,
+			createdAt: new Date(row.created_at),
+			items: (row.items || []).map((oi: any) => ({
+				id: oi.id,
+				name: oi.menu_item?.name_en ?? "Unknown item",
+				quantity: oi.quantity,
+				price: oi.price_at_time,
+				specialRequests: oi.special_requests || undefined,
+			})),
+		}));
 
-        const hydrated: TableOrder = {
-          id: row.id,
-          tableNumber,
-          status: row.status,
-          items,
-          total: row.total_amount,
-          createdAt: new Date(row.created_at),
-        };
+		return formattedOrders;
+	}, []);
 
-        map.set(tableId, [...(map.get(tableId) || []), hydrated]);
-      }
+	const fetchDailyInsights = React.useCallback(async (restaurantId: string) => {
+		const dayStart = new Date();
+		dayStart.setHours(0, 0, 0, 0);
+		const dayEnd = new Date();
+		dayEnd.setHours(23, 59, 59, 999);
 
-      return map;
-    },
-    []
-  );
+		const { data, error } = await supabase
+			.from("orders")
+			.select("id, total_amount")
+			.eq("restaurant_id", restaurantId)
+			.in("status", ["paid", "completed"])
+			.gte("created_at", dayStart.toISOString())
+			.lte("created_at", dayEnd.toISOString());
 
-  const fetchDailyInsights = React.useCallback(async (restaurantId: string) => {
-    const dayStart = new Date();
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date();
-    dayEnd.setHours(23, 59, 59, 999);
+		if (error || !data) {
+			console.error("Cashier insights fetch failed:", error);
+			setInsights({ totalRevenue: 0, totalOrders: 0 });
+			return;
+		}
 
-    const { data, error } = await supabase
-      .from('orders')
-      .select('id, total_amount')
-      .eq('restaurant_id', restaurantId)
-      .eq('status', 'paid')
-      .gte('created_at', dayStart.toISOString())
-      .lte('created_at', dayEnd.toISOString());
+		const totalRevenue = data.reduce(
+			(acc, order) => acc + Number(order.total_amount || 0),
+			0,
+		);
+		setInsights({ totalRevenue, totalOrders: data.length });
+	}, []);
 
-    if (error || !data) {
-      console.error('Cashier insights fetch failed:', JSON.stringify(error, null, 2), error);
-      setInsights({ totalRevenue: 0, totalOrders: 0 });
-      return;
-    }
+	const fetchMenuData = React.useCallback(async (restaurantId: string) => {
+		const { data, error } = await supabase
+			.from("categories")
+			.select(
+				"id, name_en, menu_items(id, name_en, price, category_id, is_available)",
+			)
+			.eq("restaurant_id", restaurantId)
+			.order("sort_order");
 
-    const totalRevenue = data.reduce(
-      (acc, order) => acc + Number(order.total_amount || 0),
-      0
-    );
-    setInsights({
-      totalRevenue,
-      totalOrders: data.length,
-    });
-  }, []);
+		if (error || !data) {
+			console.error("Menu data fetch failed:", error);
+			setMenuCategories([]);
+			setMenuItems([]);
+			return;
+		}
 
-  // Setup Realtime for the Cashier
-  useEffect(() => {
-    if (!restaurant?.id) return;
-    
-    const channel = supabase
-      .channel(`cashier-orders-${restaurant.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${restaurant.id}` },
-        async () => {
-          let cancelled = false;
-          async function refresh() {
-            if (!restaurant?.id) return;
-            if (cancelled) return;
-            const map = await fetchActiveOrders(restaurant.id);
-            if (cancelled) return;
-            setOrdersByTableId(map);
-            await fetchDailyInsights(restaurant.id);
-          }
-          await refresh();
-          return () => { cancelled = true; };
-        }
-      )
-      .subscribe();
-      
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [restaurant?.id, fetchActiveOrders, fetchDailyInsights]);
+		setMenuCategories(data.map((c) => ({ id: c.id, name_en: c.name_en })));
+		const allItems = data.flatMap((c) => (c.menu_items || []) as any[]);
+		setMenuItems(allItems.filter((i) => i.is_available));
+	}, []);
 
-  useEffect(() => {
-    let cancelled = false;
+	// Realtime
+	useEffect(() => {
+		if (!restaurant?.id) return;
+		const channel = supabase
+			.channel(`cashier-orders-${restaurant.id}`)
+			.on(
+				"postgres_changes",
+				{
+					event: "*",
+					schema: "public",
+					table: "orders",
+					filter: `restaurant_id=eq.${restaurant.id}`,
+				},
+				async () => {
+					if (!restaurant?.id) return;
+					const ords = await fetchActiveOrders(restaurant.id);
+					setOrders(ords);
+					await fetchDailyInsights(restaurant.id);
+				},
+			)
+			.subscribe();
+		return () => {
+			supabase.removeChannel(channel);
+		};
+	}, [restaurant?.id, fetchActiveOrders, fetchDailyInsights]);
 
-    async function loadData() {
-      try {
-        const restaurantData = await getRestaurantBySlugClient(slug);
-        if (!restaurantData) {
-          router.push('/');
-          return;
-        }
-        if (cancelled) return;
-        setRestaurant(restaurantData);
+	// Initial load
+	useEffect(() => {
+		let cancelled = false;
 
-        const [tablesData, map] = await Promise.all([
-          getTablesByRestaurantClient(restaurantData.id),
-          fetchActiveOrders(restaurantData.id),
-        ]);
-        if (cancelled) return;
-        setTables(tablesData);
-        setOrdersByTableId(map);
-        await fetchDailyInsights(restaurantData.id);
-      } catch (error) {
-        console.error('Error loading cashier data:', error);
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    }
+		async function loadData() {
+			try {
+				const restaurantData = await getRestaurantBySlugClient(slug);
+				if (!restaurantData) {
+					router.push("/");
+					return;
+				}
 
-    loadData();
-    return () => { cancelled = true; };
-  }, [slug, router, fetchActiveOrders, fetchDailyInsights]);
+				const staffId = localStorage.getItem(
+					`tawla_staff_${restaurantData.id}_cashier`,
+				);
+				if (!staffId) {
+					router.push(`/${slug}/login`);
+					return;
+				} // Redirect to unified login
 
-  const handleTableClick = (table: Table) => {
-    setSelectedTable(table);
-    setPanelOpen(true);
-  };
+				if (cancelled) return;
+				setRestaurant(restaurantData);
 
-  const closePanel = () => {
-    setPanelOpen(false);
-    setSelectedTable(null);
-  };
+				const [tablesData, ords] = await Promise.all([
+					getTablesByRestaurantClient(restaurantData.id),
+					fetchActiveOrders(restaurantData.id),
+					fetchDailyInsights(restaurantData.id),
+					fetchMenuData(restaurantData.id),
+				]);
 
-  const selectedOrders = selectedTable ? ordersByTableId.get(selectedTable.id) ?? [] : [];
-  const activeOrderCount = Array.from(ordersByTableId.values()).reduce((acc, orders) => acc + orders.length, 0);
+				if (cancelled) return;
+				setTables(tablesData);
+				setOrders(ords);
+			} catch (error) {
+				console.error("Error loading cashier data:", error);
+			} finally {
+				if (!cancelled) setIsLoading(false);
+			}
+		}
 
-  const handleMarkAsPaid = async () => {
-    if (!selectedTable) return;
-    
-    setIsMarkingPaid(true);
-    try {
-      // Transition all active orders for this table to `paid`
-      await supabase
-        .from('orders')
-        .update({ status: 'paid' })
-        .eq('table_id', selectedTable.id)
-        .in('status', [...CLEARABLE_ORDER_STATUSES]);
-        
-      // Also silently resolve any calls just in case they were left hanging
-      await supabase
-        .from('waiter_calls')
-        .update({ status: 'resolved' })
-        .eq('table_id', selectedTable.id)
-        .eq('status', 'active');
-        
-      toast.success(`Table #${selectedTable.table_number} marked as paid`);
-      closePanel();
-    } catch (error) {
-      console.error('Failed to mark as paid:', error);
-      toast.error('Failed to mark as paid');
-    } finally {
-      setIsMarkingPaid(false);
-    }
-  };
+		loadData();
+		return () => {
+			cancelled = true;
+		};
+	}, [slug, router, fetchActiveOrders, fetchDailyInsights, fetchMenuData]);
 
-  const handleMarkOrderPaid = async (orderId: string) => {
-    setIsMarkingPaid(true);
-    try {
-      await supabase.from('orders').update({ status: 'paid' }).eq('id', orderId);
-      toast.success('Order settled');
-    } catch (error) {
-      console.error('Failed to mark order as paid:', error);
-      toast.error('Failed to settle order');
-    } finally {
-      setIsMarkingPaid(false);
-    }
-  };
+	// ───────────────── Handlers ─────────────────
 
-  const handleClearTable = async (table: Table) => {
-    const confirmed = window.confirm(
-      `Clear Table #${table.table_number}? This will cancel active orders and resolve waiter calls.`
-    );
-    if (!confirmed) return;
+	const handleMarkOrderPaid = async (orderId: string) => {
+		if (!restaurant?.id) return;
+		setIsMarkingPaid(true);
+		try {
+			const orderToPay = orders.find((o) => o.id === orderId);
 
-    // Close panel first to avoid UI race conditions during realtime updates.
-    if (selectedTable?.id === table.id) closePanel();
+			const { error: markPaidError } = await supabase
+				.from("orders")
+				.update({ status: "paid" })
+				.eq("id", orderId)
+				.eq("restaurant_id", restaurant.id);
+			if (markPaidError) throw markPaidError;
 
-    setIsClearingTable(true);
-    try {
-      await supabase
-        .from('orders')
-        .update({ status: 'cancelled' })
-        .eq('table_id', table.id)
-        .in('status', [...CLEARABLE_ORDER_STATUSES]);
+			if (orderToPay?.tableNumber) {
+				// Find table ID
+				const targetTable = tables.find(
+					(t) => t.table_number === orderToPay.tableNumber,
+				);
+				if (targetTable) {
+					const { error: resolveCallError } = await supabase
+						.from("waiter_calls")
+						.update({ status: "resolved" })
+						.eq("table_id", targetTable.id)
+						.eq("status", "active")
+						.eq("restaurant_id", restaurant.id);
+					if (resolveCallError) throw resolveCallError;
+				}
+			}
 
-      await supabase
-        .from('waiter_calls')
-        .update({ status: 'resolved' })
-        .eq('table_id', table.id)
-        .eq('status', 'active');
+			posthog.capture("order_settled", {
+				order_id: orderId,
+				total_amount: orders.find((o) => o.id === orderId)?.total,
+				table_number: orders.find((o) => o.id === orderId)?.tableNumber,
+				restaurant_slug: slug,
+				currency: "KWD",
+			});
+			toast.success("Order settled successfully");
+			setActivePane("new_order");
+		} catch (error) {
+			console.error("Failed to mark order as paid:", error);
+			posthog.captureException(error);
+			toast.error("Failed to settle order");
+		} finally {
+			setIsMarkingPaid(false);
+		}
+	};
 
-      toast.success(`Table #${table.table_number} cleared`);
-    } catch (error) {
-      console.error('Failed to clear table:', error);
-      toast.error('Failed to clear table');
-    } finally {
-      setIsClearingTable(false);
-    }
-  };
+	const handleCancelOrder = async (orderId: string) => {
+		const confirmed = window.confirm(
+			"Are you sure you want to cancel this order?",
+		);
+		if (!confirmed || !restaurant?.id) return;
 
-  const handlePrint = () => {
-    window.print();
-  };
+		setIsClearingTable(true);
+		try {
+			const { error } = await supabase
+				.from("orders")
+				.update({ status: "cancelled" })
+				.eq("id", orderId)
+				.eq("restaurant_id", restaurant.id);
+			if (error) throw error;
 
-  const now = new Date();
+			toast.success("Order cancelled");
+			setActivePane("new_order");
+		} catch (error) {
+			console.error("Failed to cancel order:", error);
+			toast.error("Failed to cancel order");
+		} finally {
+			setIsClearingTable(false);
+		}
+	};
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background">
-        {/* Skeleton header */}
-        <header className="bg-white border-b border-border-light px-6 lg:px-8 py-4">
-          <div className="animate-pulse space-y-2">
-            <div className="h-6 w-48 rounded-lg bg-gray-200/70" />
-            <div className="h-3.5 w-32 rounded bg-gray-200/50" />
-          </div>
-        </header>
-        <main className="p-6 lg:p-8">
-          {/* Skeleton insights */}
-          <section className="mb-8 bg-white border border-border-light rounded-2xl p-5 shadow-card">
-            <div className="h-4 w-28 rounded bg-gray-200/60 mb-3" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <SkeletonInsightCard />
-              <SkeletonInsightCard />
-            </div>
-          </section>
-          {/* Skeleton table grid */}
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <SkeletonTableCard key={i} />
-            ))}
-          </div>
-        </main>
-      </div>
-    );
-  }
+	const handlePrintOrder = (order: TableOrder) => {
+		setPrintOrder(order);
+		setTimeout(() => window.print(), 200);
+	};
 
-  return (
-    <>
-      <div className="min-h-screen bg-background print:hidden">
-        {/* Header */}
-        <header className="bg-white border-b border-border-light px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl lg:text-2xl font-bold text-text-heading">
-                {restaurant?.name} — Cashier POS
-              </h1>
-              <p className="text-sm text-text-muted mt-0.5">
-                {tables.length} tables &middot; {activeOrderCount} with active orders
-              </p>
-            </div>
-            <button
-              onClick={() => router.push('/')}
-              className="px-4 py-2 bg-border-light rounded-xl text-sm font-medium text-text-heading hover:bg-border-medium transition-colors"
-            >
-              Exit
-            </button>
-          </div>
-        </header>
+	// ───────────────── New Order ─────────────────
 
-        {/* Table Grid */}
-        <main className="p-6 lg:p-8">
-          <section className="mb-8 bg-white border border-border-light rounded-2xl p-5 shadow-card">
-            <h2 className="text-sm font-bold text-text-heading mb-3">
-              Today&apos;s Insights
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="bg-primary/10 rounded-xl p-4">
-                <p className="text-xs text-text-muted uppercase tracking-wide">
-                  Total Revenue Today
-                </p>
-                <p className="text-2xl font-black text-primary mt-1">
-                  {insights.totalRevenue.toFixed(3)} KD
-                </p>
-              </div>
-              <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-                <p className="text-xs text-text-muted uppercase tracking-wide">
-                  Total Orders Today
-                </p>
-                <p className="text-2xl font-black text-green-700 mt-1">
-                  {insights.totalOrders}
-                </p>
-              </div>
-            </div>
-          </section>
+	const addToCart = (item: MenuItemRow) => {
+		setCart((prev) => {
+			const existing = prev.find((c) => c.menuItemId === item.id);
+			if (existing) {
+				return prev.map((c) =>
+					c.menuItemId === item.id ? { ...c, quantity: c.quantity + 1 } : c,
+				);
+			}
+			return [
+				...prev,
+				{
+					menuItemId: item.id,
+					name: item.name_en,
+					price: item.price,
+					quantity: 1,
+				},
+			];
+		});
+	};
 
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-            {tables.map((table, i) => {
-              const orders = ordersByTableId.get(table.id) ?? [];
-              const hasOrder = orders.length > 0;
-              return (
-                <motion.button
-                  key={table.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: i * 0.03, duration: 0.3 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => handleTableClick(table)}
-                  className={`relative aspect-square rounded-2xl border-2 flex flex-col items-center justify-center transition-all ${
-                    hasOrder
-                      ? 'border-primary bg-primary/10 shadow-card'
-                      : 'border-border-medium bg-white hover:border-border-heavy'
-                  }`}
-                >
-                  <span className={`text-2xl font-bold ${hasOrder ? 'text-primary' : 'text-text-muted'}`}>
-                    {table.table_number}
-                  </span>
-                  {hasOrder && (
-                    <span className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
-                      {orders.length} Order{orders.length > 1 ? 's' : ''}
-                    </span>
-                  )}
-                  {!hasOrder && (
-                    <span className="mt-1 text-[10px] font-medium text-text-muted">
-                      Empty
-                    </span>
-                  )}
-                </motion.button>
-              );
-            })}
-          </div>
+	const removeFromCart = (menuItemId: string) => {
+		setCart((prev) => {
+			const existing = prev.find((c) => c.menuItemId === menuItemId);
+			if (existing && existing.quantity > 1) {
+				return prev.map((c) =>
+					c.menuItemId === menuItemId ? { ...c, quantity: c.quantity - 1 } : c,
+				);
+			}
+			return prev.filter((c) => c.menuItemId !== menuItemId);
+		});
+	};
 
-          {/* Grouped list by table_number (quick cashier view) */}
-          <div className="mt-8">
-            <h2 className="text-sm font-bold text-text-heading mb-3">Active Tables</h2>
-            {Array.from(ordersByTableId.entries())
-              .map(([tableId, orders]) => ({
-                table: tables.find((t) => t.id === tableId) || null,
-                orders,
-              }))
-              .filter((x) => x.table && x.orders.length > 0)
-              .sort((a, b) => (a.table!.table_number ?? 0) - (b.table!.table_number ?? 0))
-              .map(({ table, orders }) => {
-                const sum = orders.reduce((acc, o) => acc + o.total, 0);
-                return (
-                  <div
-                    key={table!.id}
-                    className="w-full mb-3 bg-white border border-border-light rounded-2xl p-4 hover:border-border-medium transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <button
-                        onClick={() => handleTableClick(table!)}
-                        className="text-left"
-                      >
-                        <p className="text-sm font-bold text-text-heading">
-                          Table #{table!.table_number}
-                        </p>
-                        <p className="text-xs text-text-muted mt-0.5">
-                          {orders.length} order{orders.length > 1 ? 's' : ''} • {sum.toFixed(3)} KD
-                        </p>
-                      </button>
-                      <span className="text-xs font-bold text-primary">Open</span>
-                    </div>
-                    <div className="mt-3 flex items-center gap-2">
-                      <button
-                        onClick={() => handleTableClick(table!)}
-                        className="px-3 py-2 rounded-lg bg-primary text-white text-xs font-bold"
-                      >
-                        View / Settle
-                      </button>
-                      <button
-                        onClick={handlePrint}
-                        className="px-3 py-2 rounded-lg bg-border-light text-text-heading text-xs font-bold"
-                      >
-                        Print Receipt
-                      </button>
-                      <button
-                        onClick={() => handleClearTable(table!)}
-                        disabled={isClearingTable}
-                        className="px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600 text-xs font-bold disabled:opacity-70 flex items-center gap-1.5"
-                      >
-                        {isClearingTable && (
-                          <div className="animate-spin w-3 h-3 border-2 border-red-400 border-t-transparent rounded-full" />
-                        )}
-                        {isClearingTable ? 'Clearing...' : 'Clear Table (Cancel)'}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
+	const cartTotal = cart.reduce((acc, c) => acc + c.price * c.quantity, 0);
 
-          {tables.length === 0 && (
-            <div className="text-center py-20 text-text-muted">
-              <p>No tables found for this restaurant.</p>
-            </div>
-          )}
-        </main>
+	const submitNewOrder = async () => {
+		if (!restaurant?.id || cart.length === 0 || isSubmittingOrderRef.current)
+			return;
 
-        {/* Side Panel Overlay */}
-        <AnimatePresence>
-          {panelOpen && (
-            <>
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={closePanel}
-                className="fixed inset-0 bg-black/30 z-40"
-              />
-              <motion.aside
-                initial={{ x: '100%' }}
-                animate={{ x: 0 }}
-                exit={{ x: '100%' }}
-                transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-                className="fixed top-0 right-0 bottom-0 w-full max-w-md bg-white z-50 shadow-float flex flex-col"
-              >
-                {/* Panel header */}
-                <div className="flex items-center justify-between px-6 py-5 border-b border-border-light">
-                  <div>
-                    <h2 className="text-lg font-bold text-text-heading">
-                      Table #{selectedTable?.table_number}
-                    </h2>
-                    <p className="text-xs text-text-muted mt-0.5">
-                      {selectedOrders.length > 0 ? `${selectedOrders.length} active order${selectedOrders.length > 1 ? 's' : ''}` : 'No active order'}
-                    </p>
-                  </div>
-                  <button
-                    onClick={closePanel}
-                    className="w-9 h-9 rounded-xl bg-border-light flex items-center justify-center text-text-secondary hover:bg-border-medium transition-colors"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                  </button>
-                </div>
+		isSubmittingOrderRef.current = true;
+		setIsSubmittingOrder(true);
 
-                {/* Panel body */}
-                <div className="flex-1 overflow-y-auto px-6 py-5">
-                  {selectedOrders.length > 0 ? (
-                    <>
-                      <div className="space-y-4">
-                        {selectedOrders.map((order) => (
-                          <div key={order.id} className="bg-white border border-border-light rounded-2xl p-4 shadow-sm">
-                            <div className="flex items-center justify-between mb-3">
-                              <div>
-                                <p className="text-xs text-text-muted">
-                                  {order.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {order.status.replace(/_/g, ' ')}
-                                </p>
-                                <p className="text-sm font-bold text-text-heading mt-0.5">
-                                  {order.total.toFixed(3)} KD
-                                </p>
-                              </div>
-                              <button
-                                onClick={() => handleMarkOrderPaid(order.id)}
-                                disabled={isMarkingPaid}
-                                className="px-3 py-2 rounded-xl bg-green-500 text-white text-xs font-bold disabled:opacity-70"
-                              >
-                                Settle / Mark Paid
-                              </button>
-                            </div>
+		try {
+			let tableId = null;
+			if (newOrderTable !== "takeaway") {
+				const targetTable = tables.find(
+					(t) => String(t.table_number) === newOrderTable,
+				);
+				if (targetTable) tableId = targetTable.id;
+			}
 
-                            <div className="space-y-2">
-                              {order.items.map((item) => (
-                                <div key={item.id} className="flex items-start justify-between">
-                                  <div className="flex items-start gap-2">
-                                    <span className="w-7 h-7 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
-                                      {item.quantity}x
-                                    </span>
-                                    <div>
-                                      <p className="text-sm font-medium text-text-heading">{item.name}</p>
-                                      {item.specialRequests && (
-                                        <p className="text-xs text-primary mt-0.5">{item.specialRequests}</p>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <span className="text-sm font-medium text-text-heading flex-shrink-0 ms-3">
-                                    {(item.price * item.quantity).toFixed(3)} KD
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-16 text-text-muted">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mb-3 opacity-40"><rect x="2" y="7" width="20" height="3" rx="1"/><path d="M5 10v8"/><path d="M19 10v8"/></svg>
-                      <p className="text-sm">No active order for this table</p>
-                    </div>
-                  )}
-                </div>
+			// Create the order
+			const { data: orderData, error: orderError } = await supabase
+				.from("orders")
+				.insert({
+					restaurant_id: restaurant.id,
+					table_id: tableId,
+					status: "confirmed", // Cashier punch immediately confirms
+					total_amount: cartTotal,
+				})
+				.select("id")
+				.single();
 
-                {/* Panel footer */}
-                {selectedOrders.length > 0 && (
-                  <div className="px-6 py-4 border-t border-border-light flex flex-col gap-3 pb-safe">
-                    <motion.button
-                      whileTap={{ scale: 0.97 }}
-                      onClick={handleMarkAsPaid}
-                      disabled={isMarkingPaid}
-                      className="w-full py-4 bg-green-500 rounded-2xl text-white text-base font-bold flex items-center justify-center gap-2 transition-transform active:bg-green-600 disabled:opacity-70"
-                    >
-                      {isMarkingPaid ? (
-                        <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
-                      ) : (
-                        <>
-                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                          Mark as Paid / Close Table
-                        </>
-                      )}
-                    </motion.button>
-                    <motion.button
-                      whileTap={{ scale: 0.97 }}
-                      onClick={handlePrint}
-                      disabled={isMarkingPaid || isClearingTable}
-                      className="w-full py-3.5 bg-border-light text-text-heading rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-transform active:bg-border-medium disabled:opacity-50"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                      Print Invoice
-                    </motion.button>
-                    <motion.button
-                      whileTap={{ scale: 0.97 }}
-                      onClick={() => selectedTable && handleClearTable(selectedTable)}
-                      disabled={isMarkingPaid || isClearingTable}
-                      className="w-full py-3.5 bg-red-50 border border-red-200 text-red-600 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-transform active:bg-red-100 disabled:opacity-50"
-                    >
-                      {isClearingTable ? 'Clearing...' : 'Clear Table (Cancel)'}
-                    </motion.button>
-                  </div>
-                )}
-              </motion.aside>
-            </>
-          )}
-        </AnimatePresence>
-      </div>
+			if (orderError || !orderData) throw orderError;
 
-      {/* Print-only invoice (hidden on screen, visible when printing) */}
-      {selectedOrders[0] && selectedTable && (
-        <div id="invoice-print" className="hidden print:block">
-          <div className="max-w-[300px] mx-auto py-4 font-sans text-black">
-            <div className="text-center mb-4">
-              <h1 className="text-lg font-bold">{restaurant?.name}</h1>
-              <p className="text-xs text-gray-500 mt-1">Invoice</p>
-            </div>
+			// Insert order items
+			const orderItems = cart.map((c) => ({
+				order_id: orderData.id,
+				menu_item_id: c.menuItemId,
+				quantity: c.quantity,
+				price_at_time: c.price,
+			}));
 
-            <div className="border-t border-dashed border-gray-300 pt-3 mb-3">
-              <div className="flex justify-between text-xs">
-                <span>Table</span>
-                <span className="font-bold">#{selectedTable.table_number}</span>
-              </div>
-              <div className="flex justify-between text-xs mt-1">
-                <span>Date</span>
-                <span>{now.toLocaleDateString()}</span>
-              </div>
-              <div className="flex justify-between text-xs mt-1">
-                <span>Time</span>
-                <span>{now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-              </div>
-            </div>
+			const { error: itemsError } = await supabase
+				.from("order_items")
+				.insert(orderItems);
+			if (itemsError) throw itemsError;
 
-            <div className="border-t border-dashed border-gray-300 pt-3 mb-3">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left pb-1 font-semibold">Item</th>
-                    <th className="text-center pb-1 font-semibold">Qty</th>
-                    <th className="text-right pb-1 font-semibold">Price</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedOrders[0].items.map((item) => (
-                    <tr key={item.id}>
-                      <td className="py-1 pe-2">{item.name}</td>
-                      <td className="py-1 text-center">{item.quantity}</td>
-                      <td className="py-1 text-right">{(item.price * item.quantity).toFixed(3)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+			posthog.capture("cashier_order_created", {
+				order_id: orderData.id,
+				table_number: newOrderTable === "takeaway" ? null : newOrderTable,
+				order_type: newOrderTable === "takeaway" ? "takeaway" : "table",
+				item_count: cart.reduce((sum, c) => sum + c.quantity, 0),
+				total_amount: cartTotal,
+				restaurant_slug: slug,
+				currency: "KWD",
+			});
+			toast.success(`Order ${shortOrderId(orderData.id)} created successfully`);
+			setCart([]);
+			setNewOrderTable("takeaway");
+		} catch (error) {
+			console.error("Failed to create order:", error);
+			posthog.captureException(error);
+			toast.error("Failed to create order");
+		} finally {
+			isSubmittingOrderRef.current = false;
+			setIsSubmittingOrder(false);
+		}
+	};
 
-            <div className="border-t border-dashed border-gray-300 pt-3">
-              <div className="flex justify-between font-bold text-sm">
-                <span>Total</span>
-                <span>{selectedOrders[0].total.toFixed(3)} KD</span>
-              </div>
-            </div>
+	const filteredMenuItems =
+		selectedCategory === "all"
+			? menuItems
+			: menuItems.filter((m) => m.category_id === selectedCategory);
 
-            <p className="text-center text-[10px] text-gray-400 mt-6">Thank you for dining with us!</p>
-          </div>
-        </div>
-      )}
-    </>
-  );
+	const now = new Date();
+
+	// ───────────────── Render ─────────────────
+
+	if (isLoading) {
+		return (
+			<div className="min-h-screen bg-[#F5F7FA] flex items-center justify-center">
+				<div className="animate-spin w-8 h-8 border-2 border-[#0F4C75] border-t-transparent rounded-full" />
+			</div>
+		);
+	}
+
+	const activeOrderDetails =
+		activePane !== "new_order" ? orders.find((o) => o.id === activePane) : null;
+
+	return (
+		<>
+			<div className="min-h-screen flex flex-col bg-[#F5F7FA] print:hidden overflow-hidden h-screen">
+				{/* ── Top Header ── */}
+				<header className="bg-white border-b border-[#E8ECF1] px-6 h-[72px] flex-shrink-0 flex items-center justify-between z-10 w-full shadow-sm">
+					<div className="flex items-center gap-6">
+						<div>
+							<h1 className="text-xl font-bold text-[#0A1628] leading-tight">
+								{restaurant?.name}
+							</h1>
+							<p className="text-[11px] text-[#64748B] font-medium tracking-wide uppercase">
+								Cashier Terminal
+							</p>
+						</div>
+
+						{/* Daily Ledger Widget */}
+						<div className="hidden md:flex items-center gap-6 ms-4 border-l border-[#E8ECF1] pl-6 h-10">
+							<div>
+								<p className="text-[10px] text-[#94A3B8] font-bold uppercase tracking-wider mb-0.5">
+									Today's Revenue
+								</p>
+								<p className="text-lg font-black text-[#0F4C75] leading-none">
+									{insights.totalRevenue.toFixed(3)}{" "}
+									<span className="text-xs font-semibold">KD</span>
+								</p>
+							</div>
+							<div>
+								<p className="text-[10px] text-[#94A3B8] font-bold uppercase tracking-wider mb-0.5">
+									Orders Settled
+								</p>
+								<p className="text-lg font-black text-[#3282B8] leading-none">
+									{insights.totalOrders}
+								</p>
+							</div>
+						</div>
+					</div>
+
+					<div className="flex items-center gap-3">
+						<div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 rounded-lg">
+							<span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+							<span className="text-xs text-emerald-700 font-bold">Online</span>
+						</div>
+						<button
+							onClick={() => {
+								localStorage.removeItem(
+									`tawla_staff_${restaurant?.id}_cashier`,
+								);
+								router.push(`/${slug}/login`);
+							}}
+							className="w-10 h-10 rounded-xl flex items-center justify-center text-red-500 hover:bg-red-50 transition-colors"
+							title="Logout"
+						>
+							<LogOut size={18} />
+						</button>
+					</div>
+				</header>
+
+				{/* ── Main POS Workspace ── */}
+				<div className="flex-1 flex overflow-hidden">
+					{/* LEFT SIDEBAR: ACTIVE ORDERS QUEUE */}
+					<aside className="w80 lg:w-[320px] bg-white border-r border-[#E8ECF1] flex flex-col flex-shrink-0 z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+						<div className="p-4 border-b border-[#E8ECF1]">
+							<button
+								onClick={() => {
+									setActivePane("new_order");
+									setCart([]);
+									setNewOrderTable("takeaway");
+								}}
+								className={`w-full py-3 rounded-xl text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 ${activePane === "new_order" ? "bg-[#0F4C75] text-white" : "bg-[#E8F4FD] text-[#0F4C75] hover:bg-[#D1EAFD]"}`}
+							>
+								<Plus size={16} /> New Walk-in Order
+							</button>
+						</div>
+						<div className="px-4 pt-4 pb-2 border-b border-[#F1F5F9] bg-[#F8FAFC]">
+							<h3 className="text-xs font-bold text-[#64748B] uppercase tracking-wider flex items-center justify-between">
+								Active Orders Queue
+								<span className="bg-[#0F4C75] text-white px-2 py-0.5 rounded-full text-[10px]">
+									{orders.length}
+								</span>
+							</h3>
+						</div>
+						<div className="flex-1 overflow-y-auto p-4 space-y-3">
+							{orders.length === 0 ? (
+								<div className="text-center py-10 text-[#94A3B8]">
+									<span className="text-3xl block mb-2 opacity-30">📋</span>
+									<p className="text-xs">No active orders</p>
+								</div>
+							) : (
+								orders.map((order) => (
+									<button
+										key={order.id}
+										onClick={() => setActivePane(order.id)}
+										className={`w-full text-left p-3 rounded-xl border transition-all ${
+											activePane === order.id
+												? "border-[#0F4C75] bg-[#F8FAFC] shadow-sm ring-1 ring-[#0F4C75]"
+												: "border-[#E8ECF1] bg-white hover:border-[#CBD5E1]"
+										}`}
+									>
+										<div className="flex justify-between items-start mb-1">
+											<span className="text-xs font-mono font-bold text-[#0F4C75] bg-[#E8F4FD] px-1.5 py-0.5 rounded">
+												{shortOrderId(order.id)}
+											</span>
+											<span className="text-[10px] font-bold text-[#64748B]">
+												{order.createdAt.toLocaleTimeString([], {
+													hour: "2-digit",
+													minute: "2-digit",
+												})}
+											</span>
+										</div>
+										<p className="text-sm font-bold text-[#0A1628] mb-1">
+											{order.tableNumber
+												? `Table ${order.tableNumber}`
+												: "Takeaway / Walk-in"}
+										</p>
+										<div className="flex justify-between items-end">
+											<span className="text-xs text-[#64748B]">
+												{order.items.length} items
+											</span>
+											<span className="text-sm font-black text-[#0F4C75]">
+												{order.total.toFixed(3)} KD
+											</span>
+										</div>
+									</button>
+								))
+							)}
+						</div>
+					</aside>
+
+					{/* RIGHT AREA: CONTEXTUAL VIEW (NEW ORDER OR ORDER DETAILS) */}
+					<main className="flex-1 overflow-hidden bg-[#F5F7FA]">
+						{activePane === "new_order" ? (
+							/* NEW ORDER VIEW */
+							<div className="h-full flex flex-col lg:flex-row">
+								{/* Menu Section */}
+								<div className="flex-1 flex flex-col h-full overflow-hidden">
+									<div className="bg-white border-b border-[#E8ECF1] px-6 py-4 flex gap-2 overflow-x-auto min-h-[64px] items-center">
+										<button
+											onClick={() => setSelectedCategory("all")}
+											className={`px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
+												selectedCategory === "all"
+													? "bg-[#0F4C75] text-white shadow-md"
+													: "bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]"
+											}`}
+										>
+											All Items
+										</button>
+										{menuCategories.map((cat) => (
+											<button
+												key={cat.id}
+												onClick={() => setSelectedCategory(cat.id)}
+												className={`px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
+													selectedCategory === cat.id
+														? "bg-[#0F4C75] text-white shadow-md"
+														: "bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]"
+												}`}
+											>
+												{cat.name_en}
+											</button>
+										))}
+									</div>
+									<div className="flex-1 overflow-y-auto p-6">
+										<div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+											{filteredMenuItems.map((item) => {
+												const inCart = cart.find(
+													(c) => c.menuItemId === item.id,
+												);
+												return (
+													<motion.button
+														key={item.id}
+														onClick={() => addToCart(item)}
+														whileTap={{ scale: 0.96 }}
+														className={`text-left p-4 rounded-2xl border transition-all h-[100px] flex flex-col justify-between shadow-sm relative overflow-hidden ${
+															inCart
+																? "border-[#0F4C75] bg-[#E8F4FD]"
+																: "border-[#E8ECF1] bg-white hover:border-[#CBD5E1]"
+														}`}
+													>
+														<p className="text-sm font-bold text-[#0A1628] line-clamp-2 leading-tight pr-4">
+															{item.name_en}
+														</p>
+														<p className="text-sm font-black text-[#0F4C75]">
+															{item.price.toFixed(3)} KD
+														</p>
+														{inCart && (
+															<div className="absolute top-0 right-0 bg-[#0F4C75] text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">
+																x{inCart.quantity}
+															</div>
+														)}
+													</motion.button>
+												);
+											})}
+										</div>
+									</div>
+								</div>
+
+								{/* Cart Sidebar */}
+								<div className="w-full lg:w-[320px] xl:w-[380px] bg-white border-l border-[#E8ECF1] flex flex-col h-full shadow-[-4px_0_24px_rgba(0,0,0,0.02)] z-10">
+									<div className="p-5 border-b border-[#E8ECF1] bg-[#F8FAFC]">
+										<h2 className="text-lg font-black text-[#0A1628]">
+											Current Order
+										</h2>
+										<div className="mt-3">
+											<label className="text-xs font-bold text-[#64748B] uppercase tracking-wider block mb-1.5">
+												Punch to Table
+											</label>
+											<select
+												value={newOrderTable}
+												onChange={(e) => setNewOrderTable(e.target.value)}
+												className="w-full py-2.5 px-3 bg-white border border-[#E8ECF1] rounded-xl text-sm font-bold text-[#0F4C75] focus:outline-none focus:ring-2 focus:ring-[#0F4C75]/20 transition-all shadow-sm"
+											>
+												<option value="takeaway">Takeaway / Walk-in</option>
+												{tables.map((t) => (
+													<option key={t.id} value={String(t.table_number)}>
+														Table {t.table_number}
+													</option>
+												))}
+											</select>
+										</div>
+									</div>
+
+									<div className="flex-1 overflow-y-auto p-4 bg-white">
+										{cart.length === 0 ? (
+											<div className="h-full flex flex-col items-center justify-center text-[#94A3B8] opacity-60">
+												<UtensilsCrossed size={48} className="mb-4" />
+												<p className="text-sm font-medium">Cart is empty</p>
+												<p className="text-xs mt-1 text-center">
+													Tap items on the left
+													<br />
+													to add them.
+												</p>
+											</div>
+										) : (
+											<div className="space-y-3">
+												<AnimatePresence>
+													{cart.map((c) => (
+														<motion.div
+															layout
+															initial={{ opacity: 0, y: 10 }}
+															animate={{ opacity: 1, y: 0 }}
+															exit={{ opacity: 0, scale: 0.9 }}
+															key={c.menuItemId}
+															className="bg-[#F8FAFC] rounded-xl p-3 border border-[#E8ECF1]"
+														>
+															<div className="flex justify-between items-start mb-2">
+																<p className="text-sm font-bold text-[#0A1628] leading-tight flex-1 pr-2">
+																	{c.name}
+																</p>
+																<p className="text-sm font-black text-[#0F4C75]">
+																	{(c.price * c.quantity).toFixed(3)}
+																</p>
+															</div>
+															<div className="flex items-center justify-between">
+																<div className="flex items-center gap-1 bg-white border border-[#E2E8F0] p-0.5 rounded-lg shadow-sm">
+																	<button
+																		onClick={() => removeFromCart(c.menuItemId)}
+																		className="w-8 h-8 rounded shrink-0 flex items-center justify-center text-[#64748B] hover:bg-red-50 hover:text-red-500 transition-colors"
+																	>
+																		{c.quantity > 1 ? (
+																			<Minus size={14} strokeWidth={3} />
+																		) : (
+																			<Trash2 size={14} />
+																		)}
+																	</button>
+																	<span className="text-xs font-black text-[#0A1628] w-6 text-center">
+																		{c.quantity}
+																	</span>
+																	<button
+																		onClick={() =>
+																			addToCart({
+																				id: c.menuItemId,
+																				name_en: c.name,
+																				price: c.price,
+																				category_id: "",
+																				is_available: true,
+																			})
+																		}
+																		className="w-8 h-8 rounded shrink-0 flex items-center justify-center text-[#64748B] hover:bg-[#E8F4FD] hover:text-[#0F4C75] transition-colors"
+																	>
+																		<Plus size={14} strokeWidth={3} />
+																	</button>
+																</div>
+															</div>
+														</motion.div>
+													))}
+												</AnimatePresence>
+											</div>
+										)}
+									</div>
+
+									{cart.length > 0 && (
+										<div className="p-5 border-t border-[#E8ECF1] bg-white shadow-[0_-10px_30px_rgba(0,0,0,0.03)] z-20">
+											<div className="flex justify-between items-center mb-4">
+												<span className="text-sm font-bold text-[#64748B] uppercase tracking-wider">
+													Total
+												</span>
+												<span className="text-2xl font-black text-[#0F4C75]">
+													{cartTotal.toFixed(3)}{" "}
+													<span className="text-sm">KD</span>
+												</span>
+											</div>
+											<button
+												onClick={submitNewOrder}
+												disabled={isSubmittingOrder}
+												className="w-full py-4 bg-[#0F4C75] text-white rounded-xl text-[15px] font-bold disabled:opacity-60 hover:bg-[#0A3558] transition-transform active:scale-[0.98] shadow-[0_4px_14px_rgba(15,76,117,0.3)] flex items-center justify-center gap-2"
+											>
+												{isSubmittingOrder ? (
+													<div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+												) : (
+													"Confirm Order"
+												)}
+											</button>
+										</div>
+									)}
+								</div>
+							</div>
+						) : activeOrderDetails ? (
+							/* ACTIVE ORDER VIEW */
+							<div className="h-full flex justify-center items-start p-6 lg:p-12 overflow-y-auto">
+								<div className="w-full max-w-2xl bg-white border border-[#E8ECF1] rounded-3xl p-8 shadow-sm">
+									<div className="flex items-start justify-between mb-8 pb-6 border-b border-[#F1F5F9]">
+										<div>
+											<div className="flex items-center gap-3 mb-2">
+												<span className="bg-[#E8F4FD] text-[#0F4C75] font-mono font-bold text-sm px-2.5 py-1 rounded-lg">
+													{shortOrderId(activeOrderDetails.id)}
+												</span>
+												<span className="text-xs font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg">
+													{activeOrderDetails.status.replace(/_/g, " ")}
+												</span>
+											</div>
+											<h2 className="text-2xl font-black text-[#0A1628]">
+												{activeOrderDetails.tableNumber
+													? `Table ${activeOrderDetails.tableNumber}`
+													: "Takeaway Order"}
+											</h2>
+											<p className="text-sm text-[#64748B] mt-1 flex items-center gap-1.5 font-medium">
+												<Clock size={14} /> Created at{" "}
+												{activeOrderDetails.createdAt.toLocaleTimeString([], {
+													hour: "2-digit",
+													minute: "2-digit",
+												})}
+											</p>
+										</div>
+
+										<button
+											onClick={() => handlePrintOrder(activeOrderDetails)}
+											className="px-4 py-2 bg-[#F8FAFC] text-[#0A1628] border border-[#E8ECF1] rounded-xl text-sm font-bold hover:bg-[#F1F5F9] transition-colors flex items-center gap-2 shadow-sm"
+										>
+											<Printer size={16} /> Print Receipt
+										</button>
+									</div>
+
+									<div className="space-y-4 mb-8">
+										{activeOrderDetails.items.map((item) => (
+											<div
+												key={item.id}
+												className="flex justify-between items-center p-4 bg-[#F8FAFC] rounded-2xl border border-[#E8ECF1]"
+											>
+												<div className="flex gap-4 items-center">
+													<div className="w-10 h-10 rounded-xl bg-white shadow-sm border border-[#E2E8F0] flex items-center justify-center font-black text-[#0F4C75]">
+														x{item.quantity}
+													</div>
+													<div>
+														<p className="text-base font-bold text-[#0A1628]">
+															{item.name}
+														</p>
+														{item.specialRequests && (
+															<p className="text-xs font-semibold text-amber-600 mt-0.5 max-w-[200px] truncate">
+																Note: {item.specialRequests}
+															</p>
+														)}
+													</div>
+												</div>
+												<p className="text-base font-black text-[#0F4C75]">
+													{(item.price * item.quantity).toFixed(3)} KD
+												</p>
+											</div>
+										))}
+									</div>
+
+									<div className="bg-[#F8FAFC] p-6 rounded-2xl border border-[#E8ECF1] mb-8 flex justify-between items-center">
+										<span className="text-sm font-bold text-[#64748B] uppercase tracking-wider">
+											Total Amount
+										</span>
+										<span className="text-3xl font-black text-[#0F4C75]">
+											{activeOrderDetails.total.toFixed(3)} KD
+										</span>
+									</div>
+
+									<div className="flex gap-4">
+										<button
+											onClick={() => handleCancelOrder(activeOrderDetails.id)}
+											disabled={isClearingTable || isMarkingPaid}
+											className="flex-1 py-4 bg-white border-2 border-red-100 text-red-500 rounded-2xl text-[15px] font-bold hover:bg-red-50 hover:border-red-200 transition-colors disabled:opacity-50"
+										>
+											Cancel Order
+										</button>
+										<button
+											onClick={() => handleMarkOrderPaid(activeOrderDetails.id)}
+											disabled={isMarkingPaid || isClearingTable}
+											className="flex-[2] py-4 bg-[#0F4C75] text-white rounded-2xl text-[15px] font-bold hover:bg-[#0A3558] transition-all shadow-[0_4px_14px_rgba(15,76,117,0.3)] disabled:opacity-70 flex items-center justify-center gap-2"
+										>
+											{isMarkingPaid ? (
+												<div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+											) : (
+												"Settle Payment"
+											)}
+										</button>
+									</div>
+								</div>
+							</div>
+						) : null}
+					</main>
+				</div>
+			</div>
+
+			{/* ── Print Receipt (Desktop Thermal Style) ── */}
+			{printOrder && (
+				<div
+					id="invoice-print"
+					className="hidden print:flex justify-center w-full bg-white text-black font-sans p-8"
+				>
+					<div className="w-[300px]">
+						<div className="text-center mb-6">
+							<h1 className="text-2xl font-black">{restaurant?.name}</h1>
+							<p className="text-sm font-bold mt-1 uppercase tracking-widest text-gray-500">
+								Invoice
+							</p>
+						</div>
+
+						<div className="border-t-2 border-dashed border-gray-400 py-3 mb-3">
+							<div className="flex justify-between text-sm mb-1">
+								<span className="font-semibold text-gray-600">Order ID:</span>
+								<span className="font-bold">{shortOrderId(printOrder.id)}</span>
+							</div>
+							<div className="flex justify-between text-sm mb-1">
+								<span className="font-semibold text-gray-600">Type:</span>
+								<span className="font-bold">
+									{printOrder.tableNumber
+										? `Table ${printOrder.tableNumber}`
+										: "Takeaway"}
+								</span>
+							</div>
+							<div className="flex justify-between text-sm">
+								<span className="font-semibold text-gray-600">Date:</span>
+								<span className="font-bold">
+									{now.toLocaleDateString()}{" "}
+									{now.toLocaleTimeString([], {
+										hour: "2-digit",
+										minute: "2-digit",
+									})}
+								</span>
+							</div>
+						</div>
+
+						<div className="border-t-2 border-dashed border-gray-400 pt-3 mb-4">
+							<table className="w-full text-sm">
+								<thead>
+									<tr className="border-b-2 border-gray-300">
+										<th className="text-left pb-2 font-bold uppercase tracking-wider w-[10%]">
+											Qty
+										</th>
+										<th className="text-left pb-2 font-bold uppercase tracking-wider">
+											Item
+										</th>
+										<th className="text-right pb-2 font-bold uppercase tracking-wider">
+											Amt
+										</th>
+									</tr>
+								</thead>
+								<tbody>
+									{printOrder.items.map((item) => (
+										<tr key={item.id}>
+											<td className="py-2 text-left font-bold border-b border-gray-100">
+												{item.quantity}
+											</td>
+											<td className="py-2 pr-2 border-b border-gray-100 font-semibold">
+												{item.name}
+											</td>
+											<td className="py-2 text-right font-bold border-b border-gray-100">
+												{(item.price * item.quantity).toFixed(2)}
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</div>
+
+						<div className="border-t-2 border-dashed border-gray-400 pt-4 mt-2">
+							<div className="flex justify-between items-center text-lg">
+								<span className="font-bold uppercase tracking-widest">
+									Total
+								</span>
+								<span className="font-black">
+									{printOrder.total.toFixed(3)} KD
+								</span>
+							</div>
+						</div>
+
+						<div className="text-center mt-10">
+							<p className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+								Thank you for visiting
+							</p>
+							<p className="text-[10px] text-gray-400 mt-1">
+								Powered by Tawla POS
+							</p>
+						</div>
+					</div>
+				</div>
+			)}
+		</>
+	);
 }
