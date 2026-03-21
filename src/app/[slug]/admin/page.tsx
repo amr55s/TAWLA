@@ -36,7 +36,7 @@ function StatCard({
 	loading?: boolean;
 }) {
 	return (
-		<div className="bg-white rounded-2xl border border-[#E8ECF1] p-6 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] transition-shadow duration-300">
+		<div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-6 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] transition-shadow duration-300">
 			<div className="flex items-start justify-between mb-4">
 				<div
 					className={`w-11 h-11 rounded-xl flex items-center justify-center ${iconBg}`}
@@ -63,7 +63,7 @@ function StatCard({
 			{loading ? (
 				<div className="h-8 w-24 bg-[#F0F4F8] rounded animate-pulse mb-1" />
 			) : (
-				<p className="text-[26px] font-bold text-[#0A1628] tracking-tight mb-1">
+				<p className="text-[26px] font-bold text-[#0A1628] dark:text-white tracking-tight mb-1">
 					{value}
 				</p>
 			)}
@@ -83,10 +83,10 @@ function BarChartCard({
 	loading: boolean;
 }) {
 	return (
-		<div className="bg-white rounded-2xl border border-[#E8ECF1] p-6 h-full flex flex-col">
+		<div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-6 h-full flex flex-col">
 			<div className="flex items-center justify-between mb-6">
 				<div>
-					<h3 className="text-sm font-bold text-[#0A1628]">Revenue Trends</h3>
+					<h3 className="text-sm font-bold text-[#0A1628] dark:text-white">Revenue Trends</h3>
 					<p className="text-xs text-[#7B8BA3] mt-0.5">
 						Revenue over last 6 months
 					</p>
@@ -154,10 +154,10 @@ function DonutChartCard({
 	}
 
 	return (
-		<div className="bg-white rounded-2xl border border-[#E8ECF1] p-6 h-full flex flex-col">
+		<div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-6 h-full flex flex-col">
 			<div className="flex items-center justify-between mb-6">
 				<div>
-					<h3 className="text-sm font-bold text-[#0A1628]">Order Status</h3>
+					<h3 className="text-sm font-bold text-[#0A1628] dark:text-white">Order Status</h3>
 					<p className="text-xs text-[#7B8BA3] mt-0.5">
 						Breakdown of all orders
 					</p>
@@ -181,7 +181,7 @@ function DonutChartCard({
 						/>
 						<div className="absolute inset-[25%] rounded-full bg-white flex items-center justify-center shadow-inner">
 							<div className="text-center">
-								<p className="text-lg font-bold text-[#0A1628]">{total}</p>
+								<p className="text-lg font-bold text-[#0A1628] dark:text-white">{total}</p>
 								<p className="text-[9px] text-[#7B8BA3] font-medium uppercase tracking-wider">
 									Total
 								</p>
@@ -204,7 +204,7 @@ function DonutChartCard({
 										{seg.label}
 									</span>
 								</div>
-								<span className="text-xs font-bold text-[#0A1628]">
+								<span className="text-xs font-bold text-[#0A1628] dark:text-white">
 									{seg.pct}%
 								</span>
 							</div>
@@ -242,10 +242,10 @@ function RecentOrdersCard({
 	};
 
 	return (
-		<div className="bg-white rounded-2xl border border-[#E8ECF1] p-6 h-full flex flex-col">
+		<div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-6 h-full flex flex-col">
 			<div className="flex items-center justify-between mb-5">
 				<div>
-					<h3 className="text-sm font-bold text-[#0A1628]">Recent Orders</h3>
+					<h3 className="text-sm font-bold text-[#0A1628] dark:text-white">Recent Orders</h3>
 					<p className="text-xs text-[#7B8BA3] mt-0.5">
 						Latest activity across tables
 					</p>
@@ -291,7 +291,7 @@ function RecentOrdersCard({
 									key={o.id}
 									className="border-b border-[#F8FAFB] last:border-0 hover:bg-[#FAFBFC] transition-colors"
 								>
-									<td className="py-3 text-xs font-bold text-[#0A1628]">
+									<td className="py-3 text-xs font-bold text-[#0A1628] dark:text-white">
 										#{o.order_number || o.id.slice(0, 4)}
 									</td>
 									<td className="py-3 text-xs text-[#5A6B82] font-medium">
@@ -299,7 +299,7 @@ function RecentOrdersCard({
 											? `T-${o.tables.table_number}`
 											: "Takeaway"}
 									</td>
-									<td className="py-3 text-xs font-semibold text-[#0A1628]">
+									<td className="py-3 text-xs font-semibold text-[#0A1628] dark:text-white">
 										${Number(o.total_amount).toFixed(2)}
 									</td>
 									<td className="py-3">
@@ -332,10 +332,10 @@ function StaffOnDutyCard({
 	slug: string;
 }) {
 	return (
-		<div className="bg-white rounded-2xl border border-[#E8ECF1] p-6 h-full flex flex-col">
+		<div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-6 h-full flex flex-col">
 			<div className="flex items-center justify-between mb-5">
 				<div>
-					<h3 className="text-sm font-bold text-[#0A1628]">Staff On Duty</h3>
+					<h3 className="text-sm font-bold text-[#0A1628] dark:text-white">Staff On Duty</h3>
 					<p className="text-xs text-[#7B8BA3] mt-0.5">
 						{staff.length} active now
 					</p>
@@ -369,7 +369,7 @@ function StaffOnDutyCard({
 								</span>
 							</div>
 							<div className="flex-1 min-w-0">
-								<p className="text-xs font-semibold text-[#0A1628]">{s.name}</p>
+								<p className="text-xs font-semibold text-[#0A1628] dark:text-white">{s.name}</p>
 								<p className="text-[10px] text-[#7B8BA3] capitalize">
 									{s.role}
 								</p>
@@ -653,7 +653,7 @@ export default function AdminDashboardPage() {
 			{/* Page Header */}
 			<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
 				<div>
-					<h1 className="text-xl font-bold text-[#0A1628] tracking-tight">
+					<h1 className="text-xl font-bold text-[#0A1628] dark:text-white tracking-tight">
 						Dashboard
 					</h1>
 					<p className="text-xs text-[#7B8BA3] mt-1" suppressHydrationWarning>

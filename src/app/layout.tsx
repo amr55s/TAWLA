@@ -1,9 +1,14 @@
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
-import { Playfair_Display, Plus_Jakarta_Sans, Tajawal } from "next/font/google";
+import { Playfair_Display, Plus_Jakarta_Sans, Tajawal, Geist } from "next/font/google";
 import { Toaster } from "sonner";
 import { PostHogProvider } from "@/providers/PostHogProvider";
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import ReactQueryProvider from "@/components/providers/ReactQueryProvider";
 import "./globals.css";
+import { cn } from "@/lib/utils";
+
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 const plusJakartaSans = Plus_Jakarta_Sans({
 	variable: "--font-plus-jakarta-sans",
@@ -54,14 +59,18 @@ export default function RootLayout({
 	children: React.ReactNode;
 }>) {
 	return (
-		<html lang="en" dir="ltr" suppressHydrationWarning>
+		<html lang="en" dir="ltr" suppressHydrationWarning className={cn("font-sans", geist.variable)}>
 			<body
 				suppressHydrationWarning
-				className={`${plusJakartaSans.variable} ${tajawal.variable} ${playfairDisplay.variable} antialiased bg-background text-text-body min-h-screen`}
+				className={`${plusJakartaSans.variable} ${tajawal.variable} ${playfairDisplay.variable} bg-background text-foreground antialiased min-h-screen transition-colors duration-200`}
 			>
-				<PostHogProvider>{children}</PostHogProvider>
-				<Analytics />
-				<Toaster position="top-right" richColors closeButton />
+				<ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+					<ReactQueryProvider>
+						<PostHogProvider>{children}</PostHogProvider>
+						<Analytics />
+						<Toaster position="top-right" richColors closeButton />
+					</ReactQueryProvider>
+				</ThemeProvider>
 			</body>
 		</html>
 	);

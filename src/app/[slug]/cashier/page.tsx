@@ -9,17 +9,26 @@ import {
 	Printer,
 	Trash2,
 	UtensilsCrossed,
+	Search,
+	CreditCard,
+	ArrowRight,
+	ChefHat,
+	Coffee,
+	CircleSlash,
+	Sun,
+	Moon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import * as React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { toast } from "sonner";
 import {
 	getRestaurantBySlugClient,
 	getTablesByRestaurantClient,
 } from "@/lib/data/orders.client";
 import { createClient } from "@/lib/supabase/client";
+import { useTheme } from "@/lib/contexts/ThemeContext";
 import type { Restaurant, Table } from "@/types/database";
 
 const supabase = createClient();
@@ -48,25 +57,14 @@ const CASHIER_ACTIVE_ORDER_STATUSES = [
 	"confirmed_by_waiter",
 	"in_kitchen",
 	"ready",
+	"pending", // Sometimes orders arrive as pending
 ] as const;
-const CLEARABLE_ORDER_STATUSES = [
-	...CASHIER_ACTIVE_ORDER_STATUSES,
-	"pending",
-	"in_kitchen",
-	"ready",
-] as const;
-
-interface DailyInsights {
-	totalRevenue: number;
-	totalOrders: number;
-}
 
 // Generates a short order ID from UUID, e.g. "ORD-4A2F"
 function shortOrderId(uuid: string): string {
 	return "ORD-" + uuid.slice(-4).toUpperCase();
 }
 
-// -- New Order types --
 interface CartItem {
 	menuItemId: string;
 	name: string;
@@ -85,6 +83,7 @@ interface MenuItemRow {
 	price: number;
 	category_id: string;
 	is_available: boolean;
+	image_url?: string;
 }
 
 export default function CashierDashboardPage({
@@ -94,43 +93,37 @@ export default function CashierDashboardPage({
 }) {
 	const router = useRouter();
 	const { slug } = React.use(params);
+	const { theme, setTheme } = useTheme();
+
+	const [mounted, setMounted] = useState(false);
+	useEffect(() => setMounted(true), []);
 
 	const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
 	const [tables, setTables] = useState<Table[]>([]);
-	// We'll store orders by ID directly, or group by table. For takeaway, table is 'takeaway'
 	const [orders, setOrders] = useState<TableOrder[]>([]);
-
 	const [isLoading, setIsLoading] = useState(true);
 
-	// What is selected in the right panel? Either 'new_order' or an Order ID
-	const [activePane, setActivePane] = useState<"new_order" | string>(
-		"new_order",
-	);
+	// Multi-column POS State
+	const [activeOrderType, setActiveOrderType] = useState<"dine_in" | "takeaway" | "existing">("takeaway");
+	const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
+	const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
+	const [cart, setCart] = useState<CartItem[]>([]);
+	const [searchQuery, setSearchQuery] = useState("");
+	
+	const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+	const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+	const [isVoiding, setIsVoiding] = useState(false);
+	const isSubmittingOrderRef = useRef(false);
 
-	const [isMarkingPaid, setIsMarkingPaid] = useState(false);
-	const [isClearingTable, setIsClearingTable] = useState(false);
-
-	const [insights, setInsights] = useState<DailyInsights>({
-		totalRevenue: 0,
-		totalOrders: 0,
-	});
-
-	// -- Order receipt / print state --
-	const [printOrder, setPrintOrder] = useState<TableOrder | null>(null);
-
-	// -- Menu Data (fetched once) --
+	// Menu Data
 	const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
 	const [menuItems, setMenuItems] = useState<MenuItemRow[]>([]);
 	const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
-	// -- Cart --
-	const [cart, setCart] = useState<CartItem[]>([]);
-	const [newOrderTable, setNewOrderTable] = useState<string>("takeaway");
-	const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
-	const isSubmittingOrderRef = useRef(false);
+	// Print State
+	const [printOrder, setPrintOrder] = useState<TableOrder | null>(null);
 
 	// ───────────────── Data fetching ─────────────────
-
 	const fetchActiveOrders = React.useCallback(async (restaurantId: string) => {
 		const { data, error } = await supabase
 			.from("orders")
@@ -153,10 +146,7 @@ export default function CashierDashboardPage({
 			.order("created_at", { ascending: false });
 
 		if (error || !data) {
-			console.error(
-				"Cashier orders fetch failed:",
-				JSON.stringify(error, null, 2),
-			);
+			console.error("Cashier orders fetch failed:", JSON.stringify(error, null, 2));
 			return [];
 		}
 
@@ -178,39 +168,10 @@ export default function CashierDashboardPage({
 		return formattedOrders;
 	}, []);
 
-	const fetchDailyInsights = React.useCallback(async (restaurantId: string) => {
-		const dayStart = new Date();
-		dayStart.setHours(0, 0, 0, 0);
-		const dayEnd = new Date();
-		dayEnd.setHours(23, 59, 59, 999);
-
-		const { data, error } = await supabase
-			.from("orders")
-			.select("id, total_amount")
-			.eq("restaurant_id", restaurantId)
-			.in("status", ["paid", "completed"])
-			.gte("created_at", dayStart.toISOString())
-			.lte("created_at", dayEnd.toISOString());
-
-		if (error || !data) {
-			console.error("Cashier insights fetch failed:", error);
-			setInsights({ totalRevenue: 0, totalOrders: 0 });
-			return;
-		}
-
-		const totalRevenue = data.reduce(
-			(acc, order) => acc + Number(order.total_amount || 0),
-			0,
-		);
-		setInsights({ totalRevenue, totalOrders: data.length });
-	}, []);
-
 	const fetchMenuData = React.useCallback(async (restaurantId: string) => {
 		const { data, error } = await supabase
 			.from("categories")
-			.select(
-				"id, name_en, menu_items(id, name_en, price, category_id, is_available)",
-			)
+			.select("id, name_en, menu_items(id, name_en, price, category_id, is_available, image_url)")
 			.eq("restaurant_id", restaurantId)
 			.order("sort_order");
 
@@ -226,31 +187,26 @@ export default function CashierDashboardPage({
 		setMenuItems(allItems.filter((i) => i.is_available));
 	}, []);
 
-	// Realtime
+	// Realtime Subscriptions
 	useEffect(() => {
 		if (!restaurant?.id) return;
+		
 		const channel = supabase
 			.channel(`cashier-orders-${restaurant.id}`)
-			.on(
-				"postgres_changes",
-				{
-					event: "*",
-					schema: "public",
-					table: "orders",
-					filter: `restaurant_id=eq.${restaurant.id}`,
-				},
-				async () => {
-					if (!restaurant?.id) return;
-					const ords = await fetchActiveOrders(restaurant.id);
-					setOrders(ords);
-					await fetchDailyInsights(restaurant.id);
-				},
-			)
+			.on("postgres_changes", {
+				event: "*",
+				schema: "public",
+				table: "orders",
+				filter: `restaurant_id=eq.${restaurant.id}`,
+			}, async () => {
+				if (!restaurant?.id) return;
+				const ords = await fetchActiveOrders(restaurant.id);
+				setOrders(ords);
+			})
 			.subscribe();
-		return () => {
-			supabase.removeChannel(channel);
-		};
-	}, [restaurant?.id, fetchActiveOrders, fetchDailyInsights]);
+			
+		return () => { supabase.removeChannel(channel); };
+	}, [restaurant?.id, fetchActiveOrders]);
 
 	// Initial load
 	useEffect(() => {
@@ -264,13 +220,11 @@ export default function CashierDashboardPage({
 					return;
 				}
 
-				const staffId = localStorage.getItem(
-					`tawla_staff_${restaurantData.id}_cashier`,
-				);
+				const staffId = localStorage.getItem(`tawla_staff_${restaurantData.id}_cashier`);
 				if (!staffId) {
 					router.push(`/${slug}/login`);
 					return;
-				} // Redirect to unified login
+				} 
 
 				if (cancelled) return;
 				setRestaurant(restaurantData);
@@ -278,7 +232,6 @@ export default function CashierDashboardPage({
 				const [tablesData, ords] = await Promise.all([
 					getTablesByRestaurantClient(restaurantData.id),
 					fetchActiveOrders(restaurantData.id),
-					fetchDailyInsights(restaurantData.id),
 					fetchMenuData(restaurantData.id),
 				]);
 
@@ -293,82 +246,80 @@ export default function CashierDashboardPage({
 		}
 
 		loadData();
-		return () => {
-			cancelled = true;
-		};
-	}, [slug, router, fetchActiveOrders, fetchDailyInsights, fetchMenuData]);
+		return () => { cancelled = true; };
+	}, [slug, router, fetchActiveOrders, fetchMenuData]);
+
 
 	// ───────────────── Handlers ─────────────────
 
-	const handleMarkOrderPaid = async (orderId: string) => {
-		if (!restaurant?.id) return;
-		setIsMarkingPaid(true);
+	const handleCollectPayment = async () => {
+		if (!restaurant?.id || !activeOrderId) return;
+		setIsProcessingPayment(true);
 		try {
-			const orderToPay = orders.find((o) => o.id === orderId);
-
-			const { error: markPaidError } = await supabase
+			const orderToPay = orders.find((o) => o.id === activeOrderId);
+			const { error } = await supabase
 				.from("orders")
 				.update({ status: "paid" })
-				.eq("id", orderId)
+				.eq("id", activeOrderId)
 				.eq("restaurant_id", restaurant.id);
-			if (markPaidError) throw markPaidError;
+			if (error) throw error;
 
 			if (orderToPay?.tableNumber) {
-				// Find table ID
-				const targetTable = tables.find(
-					(t) => t.table_number === orderToPay.tableNumber,
-				);
+				const targetTable = tables.find((t) => t.table_number === orderToPay.tableNumber);
 				if (targetTable) {
-					const { error: resolveCallError } = await supabase
+					await supabase
 						.from("waiter_calls")
 						.update({ status: "resolved" })
 						.eq("table_id", targetTable.id)
 						.eq("status", "active")
 						.eq("restaurant_id", restaurant.id);
-					if (resolveCallError) throw resolveCallError;
 				}
 			}
 
-			posthog.capture("order_settled", {
-				order_id: orderId,
-				total_amount: orders.find((o) => o.id === orderId)?.total,
-				table_number: orders.find((o) => o.id === orderId)?.tableNumber,
-				restaurant_slug: slug,
-				currency: "KWD",
-			});
-			toast.success("Order settled successfully");
-			setActivePane("new_order");
+			toast.success("Payment successful! Order closed.");
+			setActiveOrderId(null);
+			setCart([]);
+			setActiveOrderType("takeaway");
+			
+			// Auto print receipt conceptually
+			if(orderToPay) handlePrintOrder(orderToPay);
+			
 		} catch (error) {
 			console.error("Failed to mark order as paid:", error);
-			posthog.captureException(error);
-			toast.error("Failed to settle order");
+			toast.error("Failed to process payment");
 		} finally {
-			setIsMarkingPaid(false);
+			setIsProcessingPayment(false);
 		}
 	};
 
-	const handleCancelOrder = async (orderId: string) => {
-		const confirmed = window.confirm(
-			"Are you sure you want to cancel this order?",
-		);
-		if (!confirmed || !restaurant?.id) return;
+	const handleVoidOrder = async () => {
+		if (!restaurant?.id || !activeOrderId) {
+			// If not an existing order, just clear the cart
+			setCart([]);
+			return;
+		}
 
-		setIsClearingTable(true);
+		const confirmed = window.confirm("Void this active order? This cannot be undone.");
+		if (!confirmed) return;
+
+		setIsVoiding(true);
 		try {
 			const { error } = await supabase
 				.from("orders")
 				.update({ status: "cancelled" })
-				.eq("id", orderId)
+				.eq("id", activeOrderId)
 				.eq("restaurant_id", restaurant.id);
 			if (error) throw error;
 
-			toast.success("Order cancelled");
-			setActivePane("new_order");
+			toast.success("Order voided successfully");
+			setActiveOrderId(null);
+			setCart([]);
+			setActiveOrderType("takeaway");
 		} catch (error) {
-			console.error("Failed to cancel order:", error);
-			toast.error("Failed to cancel order");
+			console.error("Failed to void order:", error);
+			toast.error("Failed to void order");
 		} finally {
-			setIsClearingTable(false);
+			setIsVoiding(false);
 		}
 	};
 
@@ -377,9 +328,63 @@ export default function CashierDashboardPage({
 		setTimeout(() => window.print(), 200);
 	};
 
-	// ───────────────── New Order ─────────────────
+	const handleSendToKitchen = async () => {
+		if (!restaurant?.id || cart.length === 0 || isSubmittingOrderRef.current) return;
+
+		if (activeOrderType === "dine_in" && !selectedTableId) {
+			toast.error("Please select a table from the grid first.");
+			return;
+		}
+
+		isSubmittingOrderRef.current = true;
+		setIsSubmittingOrder(true);
+
+		try {
+			const { data: orderData, error: orderError } = await supabase
+				.from("orders")
+				.insert({
+					restaurant_id: restaurant.id,
+					table_id: selectedTableId,
+					status: "confirmed", 
+					total_amount: cartTotal,
+				})
+				.select("id")
+				.single();
+
+			if (orderError || !orderData) throw orderError;
+
+			const orderItems = cart.map((c) => ({
+				order_id: orderData.id,
+				menu_item_id: c.menuItemId,
+				quantity: c.quantity,
+				price_at_time: c.price,
+			}));
+
+			const { error: itemsError } = await supabase.from("order_items").insert(orderItems);
+			if (itemsError) throw itemsError;
+
+			toast.success(`Order sent to kitchen successfully!`);
+			setCart([]);
+			setSelectedTableId(null);
+			// Auto switch to existing to wait for payment
+			setActiveOrderId(orderData.id);
+			setActiveOrderType("existing");
+		} catch (error) {
+			console.error("Failed to create order:", error);
+			toast.error("Failed to send order");
+		} finally {
+			isSubmittingOrderRef.current = false;
+			setIsSubmittingOrder(false);
+		}
+	};
+
+	// ───────────────── Cart Helpers ─────────────────
 
 	const addToCart = (item: MenuItemRow) => {
+		if (activeOrderType === "existing") {
+			toast.error("Cannot modify an existing sent order directly. Create a new ticket.");
+			return;
+		}
 		setCart((prev) => {
 			const existing = prev.find((c) => c.menuItemId === item.id);
 			if (existing) {
@@ -387,19 +392,12 @@ export default function CashierDashboardPage({
 					c.menuItemId === item.id ? { ...c, quantity: c.quantity + 1 } : c,
 				);
 			}
-			return [
-				...prev,
-				{
-					menuItemId: item.id,
-					name: item.name_en,
-					price: item.price,
-					quantity: 1,
-				},
-			];
+			return [...prev, { menuItemId: item.id, name: item.name_en, price: item.price, quantity: 1 }];
 		});
 	};
 
 	const removeFromCart = (menuItemId: string) => {
+		if (activeOrderType === "existing") return;
 		setCart((prev) => {
 			const existing = prev.find((c) => c.menuItemId === menuItemId);
 			if (existing && existing.quantity > 1) {
@@ -413,600 +411,464 @@ export default function CashierDashboardPage({
 
 	const cartTotal = cart.reduce((acc, c) => acc + c.price * c.quantity, 0);
 
-	const submitNewOrder = async () => {
-		if (!restaurant?.id || cart.length === 0 || isSubmittingOrderRef.current)
-			return;
-
-		isSubmittingOrderRef.current = true;
-		setIsSubmittingOrder(true);
-
-		try {
-			let tableId = null;
-			if (newOrderTable !== "takeaway") {
-				const targetTable = tables.find(
-					(t) => String(t.table_number) === newOrderTable,
-				);
-				if (targetTable) tableId = targetTable.id;
-			}
-
-			// Create the order
-			const { data: orderData, error: orderError } = await supabase
-				.from("orders")
-				.insert({
-					restaurant_id: restaurant.id,
-					table_id: tableId,
-					status: "confirmed", // Cashier punch immediately confirms
-					total_amount: cartTotal,
-				})
-				.select("id")
-				.single();
-
-			if (orderError || !orderData) throw orderError;
-
-			// Insert order items
-			const orderItems = cart.map((c) => ({
-				order_id: orderData.id,
-				menu_item_id: c.menuItemId,
-				quantity: c.quantity,
-				price_at_time: c.price,
-			}));
-
-			const { error: itemsError } = await supabase
-				.from("order_items")
-				.insert(orderItems);
-			if (itemsError) throw itemsError;
-
-			posthog.capture("cashier_order_created", {
-				order_id: orderData.id,
-				table_number: newOrderTable === "takeaway" ? null : newOrderTable,
-				order_type: newOrderTable === "takeaway" ? "takeaway" : "table",
-				item_count: cart.reduce((sum, c) => sum + c.quantity, 0),
-				total_amount: cartTotal,
-				restaurant_slug: slug,
-				currency: "KWD",
-			});
-			toast.success(`Order ${shortOrderId(orderData.id)} created successfully`);
-			setCart([]);
-			setNewOrderTable("takeaway");
-		} catch (error) {
-			console.error("Failed to create order:", error);
-			posthog.captureException(error);
-			toast.error("Failed to create order");
-		} finally {
-			isSubmittingOrderRef.current = false;
-			setIsSubmittingOrder(false);
+	// Derived Data
+	const filteredMenuItems = useMemo(() => {
+		let items = menuItems;
+		if (selectedCategory !== "all") {
+			items = items.filter((m) => m.category_id === selectedCategory);
 		}
-	};
+		if (searchQuery.trim()) {
+			const q = searchQuery.toLowerCase();
+			items = items.filter((m) => m.name_en.toLowerCase().includes(q));
+		}
+		return items;
+	}, [menuItems, selectedCategory, searchQuery]);
 
-	const filteredMenuItems =
-		selectedCategory === "all"
-			? menuItems
-			: menuItems.filter((m) => m.category_id === selectedCategory);
-
-	const now = new Date();
+	const existingActiveOrder = activeOrderId ? orders.find(o => o.id === activeOrderId) : null;
+	const displayTotal = activeOrderType === "existing" && existingActiveOrder ? existingActiveOrder.total : cartTotal;
+	const displayItems = activeOrderType === "existing" && existingActiveOrder 
+		? existingActiveOrder.items.map(i => ({ name: i.name, quantity: i.quantity, price: i.price, id: i.id }))
+		: cart.map(i => ({ name: i.name, quantity: i.quantity, price: i.price, id: i.menuItemId }));
 
 	// ───────────────── Render ─────────────────
 
 	if (isLoading) {
 		return (
-			<div className="min-h-screen bg-[#F5F7FA] flex items-center justify-center">
-				<div className="animate-spin w-8 h-8 border-2 border-[#0F4C75] border-t-transparent rounded-full" />
+			<div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+				<div className="animate-spin w-10 h-10 border-4 border-[#0F4C75] dark:border-white border-t-transparent rounded-full shadow-lg" />
 			</div>
 		);
 	}
 
-	const activeOrderDetails =
-		activePane !== "new_order" ? orders.find((o) => o.id === activePane) : null;
-
 	return (
-		<>
-			<div className="min-h-screen flex flex-col bg-[#F5F7FA] print:hidden overflow-hidden h-screen">
-				{/* ── Top Header ── */}
-				<header className="bg-white border-b border-[#E8ECF1] px-6 h-[72px] flex-shrink-0 flex items-center justify-between z-10 w-full shadow-sm">
-					<div className="flex items-center gap-6">
-						<div>
-							<h1 className="text-xl font-bold text-[#0A1628] leading-tight">
-								{restaurant?.name}
-							</h1>
-							<p className="text-[11px] text-[#64748B] font-medium tracking-wide uppercase">
-								Cashier Terminal
-							</p>
-						</div>
-
-						{/* Daily Ledger Widget */}
-						<div className="hidden md:flex items-center gap-6 ms-4 border-l border-[#E8ECF1] pl-6 h-10">
-							<div>
-								<p className="text-[10px] text-[#94A3B8] font-bold uppercase tracking-wider mb-0.5">
-									Today's Revenue
-								</p>
-								<p className="text-lg font-black text-[#0F4C75] leading-none">
-									{insights.totalRevenue.toFixed(3)}{" "}
-									<span className="text-xs font-semibold">KD</span>
-								</p>
-							</div>
-							<div>
-								<p className="text-[10px] text-[#94A3B8] font-bold uppercase tracking-wider mb-0.5">
-									Orders Settled
-								</p>
-								<p className="text-lg font-black text-[#3282B8] leading-none">
-									{insights.totalOrders}
-								</p>
-							</div>
-						</div>
+		<div className="min-h-screen flex flex-col bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans print:hidden overflow-hidden w-full h-screen selection:bg-[#0F4C75]/20">
+			
+			{/* ── Top App Bar ── */}
+			<header className="h-[60px] bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700/50 flex items-center justify-between px-6 shrink-0 z-20 shadow-sm">
+				<div className="flex items-center gap-4">
+					<div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#0F4C75] to-[#3282B8] flex items-center justify-center shadow-md">
+						<span className="text-white text-xs font-black">T</span>
 					</div>
+					<div>
+						<h1 className="text-base font-black leading-none">{restaurant?.name}</h1>
+						<span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">POS Station</span>
+					</div>
+				</div>
+				<div className="flex items-center gap-4">
+					{mounted && (
+						<button
+							onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+							className="p-2 rounded-xl text-gray-400 hover:text-gray-900 hover:bg-gray-100 dark:hover:text-white dark:hover:bg-gray-700 transition-colors"
+						>
+							{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+						</button>
+					)}
+					<div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 rounded-full border border-emerald-100 dark:border-emerald-500/20">
+						<span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+						<span className="text-xs text-emerald-700 dark:text-emerald-400 font-black uppercase tracking-wider">Online</span>
+					</div>
+					<button
+						onClick={() => {
+							localStorage.removeItem(`tawla_staff_${restaurant?.id}_cashier`);
+							router.push(`/${slug}/login`);
+						}}
+						className="flex items-center gap-2 px-3 py-1.5 rounded-full text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors font-bold text-xs uppercase"
+					>
+						<LogOut size={14} strokeWidth={2.5}/> Exit
+					</button>
+				</div>
+			</header>
 
-					<div className="flex items-center gap-3">
-						<div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 rounded-lg">
-							<span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-							<span className="text-xs text-emerald-700 font-bold">Online</span>
-						</div>
+			{/* ── Main Workspace (3 columns) ── */}
+			<div className="flex-1 flex overflow-hidden">
+				
+				{/* ── COL 1: Operations & Tables (~25%) ── */}
+				<aside className="w-full max-w-[300px] xl:max-w-[340px] bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700/50 flex flex-col shrink-0 z-10">
+					<div className="p-4 flex flex-col gap-3 border-b border-gray-100 dark:border-gray-700/50">
 						<button
 							onClick={() => {
-								localStorage.removeItem(
-									`tawla_staff_${restaurant?.id}_cashier`,
-								);
-								router.push(`/${slug}/login`);
+								setActiveOrderType("dine_in");
+								setActiveOrderId(null);
+								setCart([]);
+								setSelectedTableId(null);
 							}}
-							className="w-10 h-10 rounded-xl flex items-center justify-center text-red-500 hover:bg-red-50 transition-colors"
-							title="Logout"
+							className={`w-full flex items-center justify-center gap-2 py-4 rounded-xl text-sm font-black transition-all shadow-sm border ${
+								activeOrderType === "dine_in" 
+									? "bg-[#0F4C75] text-white border-[#0F4C75] ring-2 ring-[#0F4C75]/30 offset-2 dark:ring-offset-gray-900" 
+									: "bg-gray-50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-[#0F4C75] dark:hover:border-gray-500"
+							}`}
 						>
-							<LogOut size={18} />
+							<UtensilsCrossed size={18} strokeWidth={2.5} /> New Dine-in
+						</button>
+						<button
+							onClick={() => {
+								setActiveOrderType("takeaway");
+								setActiveOrderId(null);
+								setCart([]);
+								setSelectedTableId(null);
+							}}
+							className={`w-full flex items-center justify-center gap-2 py-4 rounded-xl text-sm font-black transition-all shadow-sm border ${
+								activeOrderType === "takeaway" 
+									? "bg-[#3282B8] text-white border-[#3282B8] ring-2 ring-[#3282B8]/30 offset-2 dark:ring-offset-gray-900" 
+									: "bg-gray-50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-[#3282B8] dark:hover:border-gray-500"
+							}`}
+						>
+							<Coffee size={18} strokeWidth={2.5} /> New Takeaway
 						</button>
 					</div>
-				</header>
 
-				{/* ── Main POS Workspace ── */}
-				<div className="flex-1 flex overflow-hidden">
-					{/* LEFT SIDEBAR: ACTIVE ORDERS QUEUE */}
-					<aside className="w80 lg:w-[320px] bg-white border-r border-[#E8ECF1] flex flex-col flex-shrink-0 z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-						<div className="p-4 border-b border-[#E8ECF1]">
-							<button
-								onClick={() => {
-									setActivePane("new_order");
-									setCart([]);
-									setNewOrderTable("takeaway");
-								}}
-								className={`w-full py-3 rounded-xl text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 ${activePane === "new_order" ? "bg-[#0F4C75] text-white" : "bg-[#E8F4FD] text-[#0F4C75] hover:bg-[#D1EAFD]"}`}
-							>
-								<Plus size={16} /> New Walk-in Order
-							</button>
-						</div>
-						<div className="px-4 pt-4 pb-2 border-b border-[#F1F5F9] bg-[#F8FAFC]">
-							<h3 className="text-xs font-bold text-[#64748B] uppercase tracking-wider flex items-center justify-between">
-								Active Orders Queue
-								<span className="bg-[#0F4C75] text-white px-2 py-0.5 rounded-full text-[10px]">
-									{orders.length}
-								</span>
-							</h3>
-						</div>
-						<div className="flex-1 overflow-y-auto p-4 space-y-3">
-							{orders.length === 0 ? (
-								<div className="text-center py-10 text-[#94A3B8]">
-									<span className="text-3xl block mb-2 opacity-30">📋</span>
-									<p className="text-xs">No active orders</p>
-								</div>
-							) : (
-								orders.map((order) => (
-									<button
-										key={order.id}
-										onClick={() => setActivePane(order.id)}
-										className={`w-full text-left p-3 rounded-xl border transition-all ${
-											activePane === order.id
-												? "border-[#0F4C75] bg-[#F8FAFC] shadow-sm ring-1 ring-[#0F4C75]"
-												: "border-[#E8ECF1] bg-white hover:border-[#CBD5E1]"
-										}`}
-									>
-										<div className="flex justify-between items-start mb-1">
-											<span className="text-xs font-mono font-bold text-[#0F4C75] bg-[#E8F4FD] px-1.5 py-0.5 rounded">
-												{shortOrderId(order.id)}
-											</span>
-											<span className="text-[10px] font-bold text-[#64748B]">
-												{order.createdAt.toLocaleTimeString([], {
-													hour: "2-digit",
-													minute: "2-digit",
-												})}
-											</span>
-										</div>
-										<p className="text-sm font-bold text-[#0A1628] mb-1">
-											{order.tableNumber
-												? `Table ${order.tableNumber}`
-												: "Takeaway / Walk-in"}
-										</p>
-										<div className="flex justify-between items-end">
-											<span className="text-xs text-[#64748B]">
-												{order.items.length} items
-											</span>
-											<span className="text-sm font-black text-[#0F4C75]">
-												{order.total.toFixed(3)} KD
-											</span>
-										</div>
-									</button>
-								))
-							)}
-						</div>
-					</aside>
+					<div className="p-4 pb-2 bg-gray-50 dark:bg-gray-800 flex items-center justify-between border-b border-gray-200 dark:border-gray-700/50">
+						<h3 className="text-[11px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest flex items-center gap-2">
+							Active Tables & Tickets
+						</h3>
+						<span className="bg-[#0F4C75] text-white px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm">
+							{orders.length}
+						</span>
+					</div>
 
-					{/* RIGHT AREA: CONTEXTUAL VIEW (NEW ORDER OR ORDER DETAILS) */}
-					<main className="flex-1 overflow-hidden bg-[#F5F7FA]">
-						{activePane === "new_order" ? (
-							/* NEW ORDER VIEW */
-							<div className="h-full flex flex-col lg:flex-row">
-								{/* Menu Section */}
-								<div className="flex-1 flex flex-col h-full overflow-hidden">
-									<div className="bg-white border-b border-[#E8ECF1] px-6 py-4 flex gap-2 overflow-x-auto min-h-[64px] items-center">
+					<div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50 dark:bg-gray-800">
+						{/* Takeaway Pending Tickets */}
+						{orders.filter(o => !o.tableNumber).length > 0 && (
+							<div>
+								<h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 pl-1">Takeaway Queue</h4>
+								<div className="space-y-2">
+									{orders.filter(o => !o.tableNumber).map(o => (
 										<button
-											onClick={() => setSelectedCategory("all")}
-											className={`px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
-												selectedCategory === "all"
-													? "bg-[#0F4C75] text-white shadow-md"
-													: "bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]"
+											key={o.id}
+											onClick={() => {
+												setActiveOrderType("existing");
+												setActiveOrderId(o.id);
+												setSelectedTableId(null);
+											}}
+											className={`w-full text-left p-3 rounded-xl border transition-all ${
+												activeOrderId === o.id
+													? "border-[#3282B8] bg-[#3282B8]/10 shadow-sm ring-1 ring-[#3282B8]"
+													: "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600"
 											}`}
 										>
-											All Items
+											<div className="flex justify-between items-center mb-1">
+												<span className="text-xs font-black text-[#3282B8]">{shortOrderId(o.id)}</span>
+												<span className="text-[10px] font-bold text-gray-400">{o.createdAt.toLocaleTimeString([], { hour: '2-digit', minute:'2-digit' })}</span>
+											</div>
+											<div className="flex justify-between items-baseline">
+												<span className="text-sm font-bold text-gray-900 dark:text-white">{o.total.toFixed(3)} KD</span>
+												<span className="text-[10px] font-bold text-gray-500">{o.items.length} items</span>
+											</div>
 										</button>
-										{menuCategories.map((cat) => (
-											<button
-												key={cat.id}
-												onClick={() => setSelectedCategory(cat.id)}
-												className={`px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
-													selectedCategory === cat.id
-														? "bg-[#0F4C75] text-white shadow-md"
-														: "bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]"
-												}`}
-											>
-												{cat.name_en}
-											</button>
-										))}
-									</div>
-									<div className="flex-1 overflow-y-auto p-6">
-										<div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-											{filteredMenuItems.map((item) => {
-												const inCart = cart.find(
-													(c) => c.menuItemId === item.id,
-												);
-												return (
-													<motion.button
-														key={item.id}
-														onClick={() => addToCart(item)}
-														whileTap={{ scale: 0.96 }}
-														className={`text-left p-4 rounded-2xl border transition-all h-[100px] flex flex-col justify-between shadow-sm relative overflow-hidden ${
-															inCart
-																? "border-[#0F4C75] bg-[#E8F4FD]"
-																: "border-[#E8ECF1] bg-white hover:border-[#CBD5E1]"
-														}`}
-													>
-														<p className="text-sm font-bold text-[#0A1628] line-clamp-2 leading-tight pr-4">
-															{item.name_en}
-														</p>
-														<p className="text-sm font-black text-[#0F4C75]">
-															{item.price.toFixed(3)} KD
-														</p>
-														{inCart && (
-															<div className="absolute top-0 right-0 bg-[#0F4C75] text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">
-																x{inCart.quantity}
-															</div>
-														)}
-													</motion.button>
-												);
-											})}
-										</div>
-									</div>
-								</div>
-
-								{/* Cart Sidebar */}
-								<div className="w-full lg:w-[320px] xl:w-[380px] bg-white border-l border-[#E8ECF1] flex flex-col h-full shadow-[-4px_0_24px_rgba(0,0,0,0.02)] z-10">
-									<div className="p-5 border-b border-[#E8ECF1] bg-[#F8FAFC]">
-										<h2 className="text-lg font-black text-[#0A1628]">
-											Current Order
-										</h2>
-										<div className="mt-3">
-											<label className="text-xs font-bold text-[#64748B] uppercase tracking-wider block mb-1.5">
-												Punch to Table
-											</label>
-											<select
-												value={newOrderTable}
-												onChange={(e) => setNewOrderTable(e.target.value)}
-												className="w-full py-2.5 px-3 bg-white border border-[#E8ECF1] rounded-xl text-sm font-bold text-[#0F4C75] focus:outline-none focus:ring-2 focus:ring-[#0F4C75]/20 transition-all shadow-sm"
-											>
-												<option value="takeaway">Takeaway / Walk-in</option>
-												{tables.map((t) => (
-													<option key={t.id} value={String(t.table_number)}>
-														Table {t.table_number}
-													</option>
-												))}
-											</select>
-										</div>
-									</div>
-
-									<div className="flex-1 overflow-y-auto p-4 bg-white">
-										{cart.length === 0 ? (
-											<div className="h-full flex flex-col items-center justify-center text-[#94A3B8] opacity-60">
-												<UtensilsCrossed size={48} className="mb-4" />
-												<p className="text-sm font-medium">Cart is empty</p>
-												<p className="text-xs mt-1 text-center">
-													Tap items on the left
-													<br />
-													to add them.
-												</p>
-											</div>
-										) : (
-											<div className="space-y-3">
-												<AnimatePresence>
-													{cart.map((c) => (
-														<motion.div
-															layout
-															initial={{ opacity: 0, y: 10 }}
-															animate={{ opacity: 1, y: 0 }}
-															exit={{ opacity: 0, scale: 0.9 }}
-															key={c.menuItemId}
-															className="bg-[#F8FAFC] rounded-xl p-3 border border-[#E8ECF1]"
-														>
-															<div className="flex justify-between items-start mb-2">
-																<p className="text-sm font-bold text-[#0A1628] leading-tight flex-1 pr-2">
-																	{c.name}
-																</p>
-																<p className="text-sm font-black text-[#0F4C75]">
-																	{(c.price * c.quantity).toFixed(3)}
-																</p>
-															</div>
-															<div className="flex items-center justify-between">
-																<div className="flex items-center gap-1 bg-white border border-[#E2E8F0] p-0.5 rounded-lg shadow-sm">
-																	<button
-																		onClick={() => removeFromCart(c.menuItemId)}
-																		className="w-8 h-8 rounded shrink-0 flex items-center justify-center text-[#64748B] hover:bg-red-50 hover:text-red-500 transition-colors"
-																	>
-																		{c.quantity > 1 ? (
-																			<Minus size={14} strokeWidth={3} />
-																		) : (
-																			<Trash2 size={14} />
-																		)}
-																	</button>
-																	<span className="text-xs font-black text-[#0A1628] w-6 text-center">
-																		{c.quantity}
-																	</span>
-																	<button
-																		onClick={() =>
-																			addToCart({
-																				id: c.menuItemId,
-																				name_en: c.name,
-																				price: c.price,
-																				category_id: "",
-																				is_available: true,
-																			})
-																		}
-																		className="w-8 h-8 rounded shrink-0 flex items-center justify-center text-[#64748B] hover:bg-[#E8F4FD] hover:text-[#0F4C75] transition-colors"
-																	>
-																		<Plus size={14} strokeWidth={3} />
-																	</button>
-																</div>
-															</div>
-														</motion.div>
-													))}
-												</AnimatePresence>
-											</div>
-										)}
-									</div>
-
-									{cart.length > 0 && (
-										<div className="p-5 border-t border-[#E8ECF1] bg-white shadow-[0_-10px_30px_rgba(0,0,0,0.03)] z-20">
-											<div className="flex justify-between items-center mb-4">
-												<span className="text-sm font-bold text-[#64748B] uppercase tracking-wider">
-													Total
-												</span>
-												<span className="text-2xl font-black text-[#0F4C75]">
-													{cartTotal.toFixed(3)}{" "}
-													<span className="text-sm">KD</span>
-												</span>
-											</div>
-											<button
-												onClick={submitNewOrder}
-												disabled={isSubmittingOrder}
-												className="w-full py-4 bg-[#0F4C75] text-white rounded-xl text-[15px] font-bold disabled:opacity-60 hover:bg-[#0A3558] transition-transform active:scale-[0.98] shadow-[0_4px_14px_rgba(15,76,117,0.3)] flex items-center justify-center gap-2"
-											>
-												{isSubmittingOrder ? (
-													<div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
-												) : (
-													"Confirm Order"
-												)}
-											</button>
-										</div>
-									)}
+									))}
 								</div>
 							</div>
-						) : activeOrderDetails ? (
-							/* ACTIVE ORDER VIEW */
-							<div className="h-full flex justify-center items-start p-6 lg:p-12 overflow-y-auto">
-								<div className="w-full max-w-2xl bg-white border border-[#E8ECF1] rounded-3xl p-8 shadow-sm">
-									<div className="flex items-start justify-between mb-8 pb-6 border-b border-[#F1F5F9]">
-										<div>
-											<div className="flex items-center gap-3 mb-2">
-												<span className="bg-[#E8F4FD] text-[#0F4C75] font-mono font-bold text-sm px-2.5 py-1 rounded-lg">
-													{shortOrderId(activeOrderDetails.id)}
-												</span>
-												<span className="text-xs font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg">
-													{activeOrderDetails.status.replace(/_/g, " ")}
-												</span>
-											</div>
-											<h2 className="text-2xl font-black text-[#0A1628]">
-												{activeOrderDetails.tableNumber
-													? `Table ${activeOrderDetails.tableNumber}`
-													: "Takeaway Order"}
-											</h2>
-											<p className="text-sm text-[#64748B] mt-1 flex items-center gap-1.5 font-medium">
-												<Clock size={14} /> Created at{" "}
-												{activeOrderDetails.createdAt.toLocaleTimeString([], {
-													hour: "2-digit",
-													minute: "2-digit",
-												})}
+						)}
+
+						{/* Dine in Tables Grid */}
+						<div>
+							<h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 pl-1">Dine-in Tables</h4>
+							<div className="grid grid-cols-3 gap-2">
+								{tables.map(t => {
+									const activeOrder = orders.find(o => o.tableNumber === t.table_number);
+									const isOccupied = !!activeOrder;
+									const isSelected = selectedTableId === t.id || (activeOrder && activeOrderId === activeOrder.id);
+
+									return (
+										<button
+											key={t.id}
+											onClick={() => {
+												if (isOccupied) {
+													setActiveOrderType("existing");
+													setActiveOrderId(activeOrder.id);
+													setSelectedTableId(t.id);
+												} else {
+													setActiveOrderType("dine_in");
+													setActiveOrderId(null);
+													setCart([]);
+													setSelectedTableId(t.id);
+												}
+											}}
+											className={`aspect-square rounded-xl border flex flex-col items-center justify-center p-2 relative shadow-sm transition-all focus:outline-none ${
+												isSelected ? "ring-2 ring-offset-2 dark:ring-offset-gray-900 " : ""
+											} ${
+												isOccupied 
+													? "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20 text-red-900 dark:text-red-400 " + (isSelected ? "ring-red-500" : "")
+													: "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-[#0F4C75] dark:hover:border-gray-500 text-gray-900 dark:text-white " + (isSelected ? "ring-[#0F4C75]" : "")
+											}`}
+										>
+											<span className="text-xl font-black">{t.table_number}</span>
+											<span className={`text-[9px] font-bold uppercase tracking-wider mt-1 ${isOccupied ? "text-red-500" : "text-gray-400 dark:text-gray-500"}`}>
+												{isOccupied ? "Busy" : "Free"}
+											</span>
+										</button>
+									)
+								})}
+							</div>
+						</div>
+					</div>
+				</aside>
+
+				{/* ── COL 2: Menu / Build Order (~45%) ── */}
+				<main className="flex-1 flex flex-col h-full bg-gray-50 dark:bg-gray-900 min-w-[320px]">
+					<div className="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700/50 shadow-sm z-10">
+						<div className="relative w-full max-w-md">
+							<Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={18} />
+							<input
+								type="text"
+								placeholder="Search menu items..."
+								value={searchQuery}
+								onChange={e => setSearchQuery(e.target.value)}
+								className="w-full pl-10 pr-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-900/50 border-none text-sm font-bold text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-[#0F4C75] dark:focus:ring-[#3282B8] transition-all outline-none"
+							/>
+						</div>
+						<div className="flex gap-2 mt-4 overflow-x-auto pb-1 hide-scrollbar">
+							<button
+								onClick={() => setSelectedCategory("all")}
+								className={`px-4 py-2 rounded-full text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-colors border ${
+									selectedCategory === "all"
+										? "bg-gray-900 dark:bg-white text-white dark:text-gray-900 border-transparent shadow-md"
+										: "bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+								}`}
+							>
+								All
+							</button>
+							{menuCategories.map((c) => (
+								<button
+									key={c.id}
+									onClick={() => setSelectedCategory(c.id)}
+									className={`px-4 py-2 rounded-full text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-colors border ${
+										selectedCategory === c.id
+											? "bg-gray-900 dark:bg-white text-white dark:text-gray-900 border-transparent shadow-md"
+											: "bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+									}`}
+								>
+									{c.name_en}
+								</button>
+							))}
+						</div>
+					</div>
+
+					<div className="flex-1 overflow-y-auto p-4 content-visibility-auto">
+						{activeOrderType === "existing" && (
+							<div className="mb-4 p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 text-blue-800 dark:text-blue-300 text-sm font-bold flex items-center gap-3">
+								<CircleSlash size={18} /> Viewing an existing order. Modifications to sent orders must be done by voiding or creating a new ticket.
+							</div>
+						)}
+						<div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+							{filteredMenuItems.map((item) => {
+								const inCart = cart.find((c) => c.menuItemId === item.id);
+								const isDisabled = activeOrderType === "existing";
+								
+								return (
+									<motion.button
+										key={item.id}
+										whileTap={!isDisabled ? { scale: 0.95 } : {}}
+										onClick={() => addToCart(item)}
+										disabled={isDisabled}
+										className={`group relative text-left rounded-2xl border transition-all h-[120px] flex flex-col justify-between p-3 overflow-hidden ${
+											inCart
+												? "border-[#0F4C75] bg-[#0F4C75]/5 dark:bg-[#0F4C75]/20 shadow-sm"
+												: "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm hover:border-[#0F4C75]/50 dark:hover:border-gray-500"
+										} ${isDisabled ? "opacity-60 cursor-not-allowed" : ""}`}
+									>
+										{/* Decorator strip */}
+										{inCart && <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-[#0F4C75]" />}
+										
+										<div className="pr-4 z-10">
+											<p className="text-sm font-bold text-gray-900 dark:text-white leading-tight line-clamp-2">
+												{item.name_en}
 											</p>
 										</div>
+										<div className="flex justify-between items-end z-10">
+											<p className="text-sm font-black text-[#0F4C75] dark:text-[#3282B8]">
+												{item.price.toFixed(3)} KD
+											</p>
+										</div>
+										{inCart && (
+											<div className="absolute -top-1 -right-1 bg-[#0F4C75] text-white text-[11px] font-black w-8 h-8 flex items-center justify-center rounded-bl-xl shadow-md z-20">
+												x{inCart.quantity}
+											</div>
+										)}
+									</motion.button>
+								);
+							})}
+						</div>
+					</div>
+				</main>
 
-										<button
-											onClick={() => handlePrintOrder(activeOrderDetails)}
-											className="px-4 py-2 bg-[#F8FAFC] text-[#0A1628] border border-[#E8ECF1] rounded-xl text-sm font-bold hover:bg-[#F1F5F9] transition-colors flex items-center gap-2 shadow-sm"
+				{/* ── COL 3: Current Ticket (~30%) ── */}
+				<aside className="w-full max-w-[340px] xl:max-w-[400px] bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700/50 flex flex-col shrink-0 shadow-[-4px_0_24px_rgba(0,0,0,0.02)] z-20 relative">
+					{/* Ticket Header */}
+					<div className="p-5 border-b border-gray-200 dark:border-gray-700 flex flex-col gap-1 bg-gray-50/50 dark:bg-gray-800/80">
+						<div className="flex items-center justify-between">
+							<h2 className="text-lg font-black text-gray-900 dark:text-white leading-none">
+								{activeOrderType === "dine_in" ? (
+									selectedTableId ? `Table ${tables.find(t=>t.id===selectedTableId)?.table_number}` : "Select Table"
+								) : activeOrderType === "takeaway" ? (
+									"Takeaway"
+								) : (
+									existingActiveOrder?.tableNumber ? `Table ${existingActiveOrder.tableNumber}` : "Takeaway"
+								)}
+							</h2>
+							{activeOrderType === "existing" && (
+								<span className="text-[10px] font-black bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-1 rounded-md uppercase tracking-widest shadow-sm">
+									{shortOrderId(activeOrderId!)}
+								</span>
+							)}
+						</div>
+						<p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
+							{activeOrderType === "existing" ? "Current Order" : "New Order"}
+						</p>
+					</div>
+
+					{/* Ticket Items */}
+					<div className="flex-1 overflow-y-auto p-4 bg-white dark:bg-gray-800">
+						{displayItems.length === 0 ? (
+							<div className="h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 opacity-80">
+								<div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center mb-4 shadow-inner">
+									<UtensilsCrossed size={24} />
+								</div>
+								<p className="text-sm font-bold uppercase tracking-wider">Empty Ticket</p>
+								<p className="text-xs mt-2 text-center text-gray-400 font-medium">Add items from the menu.</p>
+							</div>
+						) : (
+							<div className="space-y-3">
+								<AnimatePresence>
+									{displayItems.map((item) => (
+										<motion.div
+											layout
+											initial={{ opacity: 0, scale: 0.95 }}
+											animate={{ opacity: 1, scale: 1 }}
+											exit={{ opacity: 0, scale: 0.95 }}
+											key={item.id}
+											className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col gap-3 group"
 										>
-											<Printer size={16} /> Print Receipt
-										</button>
-									</div>
-
-									<div className="space-y-4 mb-8">
-										{activeOrderDetails.items.map((item) => (
-											<div
-												key={item.id}
-												className="flex justify-between items-center p-4 bg-[#F8FAFC] rounded-2xl border border-[#E8ECF1]"
-											>
-												<div className="flex gap-4 items-center">
-													<div className="w-10 h-10 rounded-xl bg-white shadow-sm border border-[#E2E8F0] flex items-center justify-center font-black text-[#0F4C75]">
-														x{item.quantity}
-													</div>
-													<div>
-														<p className="text-base font-bold text-[#0A1628]">
-															{item.name}
-														</p>
-														{item.specialRequests && (
-															<p className="text-xs font-semibold text-amber-600 mt-0.5 max-w-[200px] truncate">
-																Note: {item.specialRequests}
-															</p>
-														)}
-													</div>
-												</div>
-												<p className="text-base font-black text-[#0F4C75]">
-													{(item.price * item.quantity).toFixed(3)} KD
+											<div className="flex justify-between items-start gap-2">
+												<p className="text-sm font-bold text-gray-900 dark:text-white leading-tight flex-1">
+													{item.name}
+												</p>
+												<p className="text-sm font-black text-[#0F4C75] dark:text-[#3282B8]">
+													{(item.price * item.quantity).toFixed(3)}
 												</p>
 											</div>
-										))}
-									</div>
-
-									<div className="bg-[#F8FAFC] p-6 rounded-2xl border border-[#E8ECF1] mb-8 flex justify-between items-center">
-										<span className="text-sm font-bold text-[#64748B] uppercase tracking-wider">
-											Total Amount
-										</span>
-										<span className="text-3xl font-black text-[#0F4C75]">
-											{activeOrderDetails.total.toFixed(3)} KD
-										</span>
-									</div>
-
-									<div className="flex gap-4">
-										<button
-											onClick={() => handleCancelOrder(activeOrderDetails.id)}
-											disabled={isClearingTable || isMarkingPaid}
-											className="flex-1 py-4 bg-white border-2 border-red-100 text-red-500 rounded-2xl text-[15px] font-bold hover:bg-red-50 hover:border-red-200 transition-colors disabled:opacity-50"
-										>
-											Cancel Order
-										</button>
-										<button
-											onClick={() => handleMarkOrderPaid(activeOrderDetails.id)}
-											disabled={isMarkingPaid || isClearingTable}
-											className="flex-[2] py-4 bg-[#0F4C75] text-white rounded-2xl text-[15px] font-bold hover:bg-[#0A3558] transition-all shadow-[0_4px_14px_rgba(15,76,117,0.3)] disabled:opacity-70 flex items-center justify-center gap-2"
-										>
-											{isMarkingPaid ? (
-												<div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
-											) : (
-												"Settle Payment"
+											
+											{activeOrderType !== "existing" && (
+												<div className="flex items-center self-start bg-gray-50 dark:bg-gray-900 rounded-lg p-1 border border-gray-200 dark:border-gray-700">
+													<button
+														onClick={() => removeFromCart(item.id)}
+														className="w-8 h-8 rounded-md flex items-center justify-center text-gray-500 hover:bg-white dark:hover:bg-gray-800 hover:text-red-500 hover:shadow-sm transition-all"
+													>
+														{item.quantity > 1 ? <Minus size={16} strokeWidth={3} /> : <Trash2 size={16} />}
+													</button>
+													<span className="text-xs font-black text-gray-900 dark:text-white w-8 text-center tabular-nums">
+														{item.quantity}
+													</span>
+													<button
+														onClick={() => {
+															// Find the raw item to add back
+															const rawItem = menuItems.find(m => m.id === item.id);
+															if (rawItem) addToCart(rawItem);
+														}}
+														className="w-8 h-8 rounded-md flex items-center justify-center text-gray-500 hover:bg-white dark:hover:bg-gray-800 hover:text-[#0F4C75] hover:shadow-sm transition-all"
+													>
+														<Plus size={16} strokeWidth={3} />
+													</button>
+												</div>
 											)}
-										</button>
-									</div>
+											{activeOrderType === "existing" && (
+												<div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+													Qty: <span className="text-gray-900 dark:text-white">{item.quantity}</span>
+												</div>
+											)}
+										</motion.div>
+									))}
+								</AnimatePresence>
+							</div>
+						)}
+					</div>
+
+					{/* Totals & Actions */}
+					{displayItems.length > 0 && (
+						<div className="flex flex-col border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-20">
+							{/* Totals Block */}
+							<div className="p-5 flex justify-between items-end border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
+								<div>
+									<p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Grand Total</p>
+									<p className="text-xs font-bold text-gray-500 dark:text-gray-400">Contains {displayItems.reduce((acc, i) => acc + i.quantity, 0)} items</p>
+								</div>
+								<div className="text-right">
+									<p className="text-3xl font-black text-[#0F4C75] dark:text-[#3282B8] tabular-nums tracking-tight">
+										{displayTotal.toFixed(3)}
+										<span className="text-sm ml-1 text-gray-400 dark:text-gray-500">KD</span>
+									</p>
 								</div>
 							</div>
-						) : null}
-					</main>
-				</div>
+
+							{/* Action Buttons Grid */}
+							<div className="p-4 grid gap-2 grid-cols-2">
+								{activeOrderType !== "existing" ? (
+									<>
+										<button
+											onClick={handleVoidOrder}
+											className="col-span-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-sm font-black hover:bg-red-100 dark:hover:bg-red-500/20 active:scale-95 transition-all outline-none"
+										>
+											<Trash2 size={16} /> Void
+										</button>
+										<button
+											onClick={handleSendToKitchen}
+											disabled={isSubmittingOrder || (activeOrderType === "dine_in" && !selectedTableId)}
+											className="col-span-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-orange-500 text-white text-sm font-black hover:bg-orange-600 active:scale-95 transition-all shadow-lg shadow-orange-500/20 disabled:opacity-50 outline-none"
+										>
+											<ChefHat size={16} /> {isSubmittingOrder ? "..." : "Send"}
+										</button>
+									</>
+								) : (
+									<>
+										<button
+											onClick={handleVoidOrder}
+											disabled={isVoiding}
+											className="col-span-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-sm font-black hover:bg-red-100 dark:hover:bg-red-500/20 active:scale-95 transition-all outline-none"
+										>
+											<CircleSlash size={16} /> {isVoiding ? "..." : "Void"}
+										</button>
+										<button
+											onClick={() => existingActiveOrder && handlePrintOrder(existingActiveOrder)}
+											className="col-span-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-black hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-95 transition-all outline-none"
+										>
+											<Printer size={16} /> Print
+										</button>
+										<button
+											onClick={handleCollectPayment}
+											disabled={isProcessingPayment}
+											className="col-span-2 flex items-center justify-center gap-2 py-4 rounded-xl bg-emerald-500 text-white text-base font-black hover:bg-emerald-600 active:scale-[0.98] transition-all shadow-xl shadow-emerald-500/20 disabled:opacity-50 outline-none uppercase tracking-wider mt-1"
+										>
+											<CreditCard size={18} strokeWidth={2.5}/> {isProcessingPayment ? "Processing..." : "Collect Payment"}
+										</button>
+									</>
+								)}
+							</div>
+						</div>
+					)}
+				</aside>
 			</div>
-
-			{/* ── Print Receipt (Desktop Thermal Style) ── */}
+			
+			{/* Print Template (Hidden normally) */}
 			{printOrder && (
-				<div
-					id="invoice-print"
-					className="hidden print:flex justify-center w-full bg-white text-black font-sans p-8"
-				>
-					<div className="w-[300px]">
-						<div className="text-center mb-6">
-							<h1 className="text-2xl font-black">{restaurant?.name}</h1>
-							<p className="text-sm font-bold mt-1 uppercase tracking-widest text-gray-500">
-								Invoice
-							</p>
-						</div>
-
-						<div className="border-t-2 border-dashed border-gray-400 py-3 mb-3">
-							<div className="flex justify-between text-sm mb-1">
-								<span className="font-semibold text-gray-600">Order ID:</span>
-								<span className="font-bold">{shortOrderId(printOrder.id)}</span>
+				<div className="hidden print:block fixed inset-0 bg-white p-8 text-black z-50">
+					<div className="text-center font-bold mb-6">
+						<h2 className="text-2xl">{restaurant?.name || "Tawla"}</h2>
+						<p className="text-sm mt-1">Order {shortOrderId(printOrder.id)}</p>
+						<p className="text-sm">{printOrder.createdAt.toLocaleString()}</p>
+					</div>
+					<div className="mb-4">
+						{printOrder.items.map((item) => (
+							<div key={item.id} className="flex justify-between items-center text-sm mb-1">
+								<span>{item.quantity}x {item.name}</span>
+								<span>{(item.quantity * item.price).toFixed(3)} KD</span>
 							</div>
-							<div className="flex justify-between text-sm mb-1">
-								<span className="font-semibold text-gray-600">Type:</span>
-								<span className="font-bold">
-									{printOrder.tableNumber
-										? `Table ${printOrder.tableNumber}`
-										: "Takeaway"}
-								</span>
-							</div>
-							<div className="flex justify-between text-sm">
-								<span className="font-semibold text-gray-600">Date:</span>
-								<span className="font-bold">
-									{now.toLocaleDateString()}{" "}
-									{now.toLocaleTimeString([], {
-										hour: "2-digit",
-										minute: "2-digit",
-									})}
-								</span>
-							</div>
-						</div>
-
-						<div className="border-t-2 border-dashed border-gray-400 pt-3 mb-4">
-							<table className="w-full text-sm">
-								<thead>
-									<tr className="border-b-2 border-gray-300">
-										<th className="text-left pb-2 font-bold uppercase tracking-wider w-[10%]">
-											Qty
-										</th>
-										<th className="text-left pb-2 font-bold uppercase tracking-wider">
-											Item
-										</th>
-										<th className="text-right pb-2 font-bold uppercase tracking-wider">
-											Amt
-										</th>
-									</tr>
-								</thead>
-								<tbody>
-									{printOrder.items.map((item) => (
-										<tr key={item.id}>
-											<td className="py-2 text-left font-bold border-b border-gray-100">
-												{item.quantity}
-											</td>
-											<td className="py-2 pr-2 border-b border-gray-100 font-semibold">
-												{item.name}
-											</td>
-											<td className="py-2 text-right font-bold border-b border-gray-100">
-												{(item.price * item.quantity).toFixed(2)}
-											</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
-
-						<div className="border-t-2 border-dashed border-gray-400 pt-4 mt-2">
-							<div className="flex justify-between items-center text-lg">
-								<span className="font-bold uppercase tracking-widest">
-									Total
-								</span>
-								<span className="font-black">
-									{printOrder.total.toFixed(3)} KD
-								</span>
-							</div>
-						</div>
-
-						<div className="text-center mt-10">
-							<p className="text-xs font-bold text-gray-500 uppercase tracking-widest">
-								Thank you for visiting
-							</p>
-							<p className="text-[10px] text-gray-400 mt-1">
-								Powered by Tawla POS
-							</p>
-						</div>
+						))}
+					</div>
+					<div className="border-t-2 border-dashed border-black pt-2 mt-4 text-right">
+						<h3 className="text-lg font-bold">Total: {printOrder.total.toFixed(3)} KD</h3>
 					</div>
 				</div>
 			)}
-		</>
+		</div>
 	);
 }

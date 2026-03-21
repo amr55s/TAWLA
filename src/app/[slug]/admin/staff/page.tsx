@@ -2,14 +2,19 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import {
+	CheckCheck,
+	Clipboard,
 	Eye,
 	EyeOff,
+	Link as LinkIcon,
 	Pencil,
 	Plus,
 	Shield,
+	Sparkles,
 	Trash2,
 	Users,
 	X,
+	ExternalLink,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -36,6 +41,7 @@ export default function AdminStaffPage() {
 	const [saving, setSaving] = useState(false);
 	const [deletingId, setDeletingId] = useState<string | null>(null);
 	const [mounted, setMounted] = useState(false);
+	const [copied, setCopied] = useState(false);
 
 	useEffect(() => {
 		setMounted(true);
@@ -178,10 +184,70 @@ export default function AdminStaffPage() {
 
 	return (
 		<div className="space-y-6">
+			{/* Enhanced Staff Invite Banner */}
+			<motion.div
+				initial={{ opacity: 0, y: -20 }}
+				animate={{ opacity: 1, y: 0 }}
+				className="bg-[#0F4C75] rounded-3xl p-8 text-white shadow-2xl shadow-[#0F4C75]/20 overflow-hidden relative border border-white/10"
+			>
+				{/* Decorative Background Elements */}
+				<div className="absolute top-[-20%] right-[-5%] w-64 h-64 rounded-full bg-[#3282B8]/20 blur-[60px]" />
+				<div className="absolute bottom-[-10%] left-[50%] w-32 h-32 rounded-full bg-[#BBE1FA]/10 blur-[40px]" />
+
+				<div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+					<div className="space-y-2">
+						<div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-[#BBE1FA] text-[10px] font-bold uppercase tracking-widest">
+							<Sparkles size={12} />
+							Onboarding
+						</div>
+						<h2 className="text-2xl font-black tracking-tight">Invite Your Team</h2>
+						<p className="text-sm text-[#BBE1FA]/70 max-w-md font-medium leading-relaxed">
+							Share this link with your staff members. They'll need their registered Name and
+							4-digit PIN to access their respective dashboards.
+						</p>
+					</div>
+
+					<div className="flex flex-col sm:flex-row items-center gap-3 bg-black/20 backdrop-blur-xl border border-white/10 p-2 rounded-2xl w-full max-w-lg lg:w-auto">
+						<div className="w-full sm:w-auto px-4 py-3 bg-white/5 rounded-xl border border-white/5 flex items-center gap-3">
+							<LinkIcon size={14} className="text-[#BBE1FA] shrink-0" />
+							<code className="text-xs font-bold font-mono text-white/90 truncate block text-left w-full sm:max-w-[200px]">
+								{typeof window !== "undefined"
+									? `${window.location.origin}/${useRestaurant().slug}/login`
+									: `.../${useRestaurant().slug}/login`}
+							</code>
+						</div>
+						<div className="flex gap-2 w-full sm:w-auto">
+							<button
+								onClick={() => {
+									const url = `${window.location.origin}/${useRestaurant().slug}/login`;
+									navigator.clipboard.writeText(url);
+									setCopied(true);
+									toast.success("Staff login link copied!");
+									setTimeout(() => setCopied(false), 2000);
+								}}
+								className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white text-[#0F4C75] text-sm font-black hover:bg-[#BBE1FA] transition-all active:scale-95 shadow-xl shadow-black/10"
+							>
+								{copied ? <CheckCheck size={16} /> : <Clipboard size={16} />}
+								{copied ? "Copied" : "Copy"}
+							</button>
+							<a
+								href={`/${useRestaurant().slug}/login`}
+								target="_blank"
+								rel="noopener noreferrer"
+								className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#3282B8] text-white text-sm font-black hover:bg-[#BBE1FA] hover:text-[#0F4C75] transition-all active:scale-95 shadow-xl shadow-black/10"
+							>
+								<ExternalLink size={16} />
+								Open
+							</a>
+						</div>
+					</div>
+				</div>
+			</motion.div>
+
 			{/* Header */}
 			<div className="flex items-center justify-between">
 				<div>
-					<h1 className="text-xl font-bold text-[#0A1628] tracking-tight">
+					<h1 className="text-xl font-bold text-[#0A1628] dark:text-white tracking-tight">
 						Staff
 					</h1>
 					<p className="text-xs text-[#7B8BA3] mt-1">
@@ -199,27 +265,27 @@ export default function AdminStaffPage() {
 
 			{/* Stats */}
 			<div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-				<div className="bg-white rounded-2xl border border-[#E8ECF1] p-5">
+				<div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-5">
 					<p className="text-[10px] text-[#B0B8C4] uppercase tracking-wider font-semibold">
 						Total Staff
 					</p>
-					<p className="text-2xl font-bold text-[#0A1628] mt-1">
+					<p className="text-2xl font-bold text-[#0A1628] dark:text-white mt-1">
 						{staff.length}
 					</p>
 				</div>
-				<div className="bg-white rounded-2xl border border-[#E8ECF1] p-5">
+				<div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-5">
 					<p className="text-[10px] text-[#B0B8C4] uppercase tracking-wider font-semibold">
 						Waiters
 					</p>
-					<p className="text-2xl font-bold text-[#0A1628] mt-1">
+					<p className="text-2xl font-bold text-[#0A1628] dark:text-white mt-1">
 						{waiters.length}
 					</p>
 				</div>
-				<div className="bg-white rounded-2xl border border-[#E8ECF1] p-5">
+				<div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-5">
 					<p className="text-[10px] text-[#B0B8C4] uppercase tracking-wider font-semibold">
 						Cashiers
 					</p>
-					<p className="text-2xl font-bold text-[#0A1628] mt-1">
+					<p className="text-2xl font-bold text-[#0A1628] dark:text-white mt-1">
 						{cashiers.length}
 					</p>
 				</div>
@@ -227,7 +293,7 @@ export default function AdminStaffPage() {
 
 			{/* Staff Grid */}
 			{staff.length === 0 ? (
-				<div className="bg-white rounded-2xl border border-[#E8ECF1] p-12 text-center">
+				<div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-12 text-center">
 					<Users size={40} className="text-[#B0B8C4] mx-auto mb-3" />
 					<p className="text-sm text-[#7B8BA3]">
 						No staff members yet. Add your first team member.
@@ -241,7 +307,7 @@ export default function AdminStaffPage() {
 							layout
 							initial={{ opacity: 0, scale: 0.96 }}
 							animate={{ opacity: 1, scale: 1 }}
-							className="bg-white rounded-2xl border border-[#E8ECF1] p-5 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] transition-shadow"
+							className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-5 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] transition-shadow"
 						>
 							<div className="flex items-start justify-between mb-3">
 								<div className="flex items-center gap-3">
@@ -255,7 +321,7 @@ export default function AdminStaffPage() {
 										</span>
 									</div>
 									<div>
-										<p className="text-sm font-semibold text-[#0A1628]">
+										<p className="text-sm font-semibold text-[#0A1628] dark:text-white">
 											{s.name}
 										</p>
 										<div className="flex items-center gap-2 mt-0.5">
@@ -331,7 +397,7 @@ export default function AdminStaffPage() {
 						>
 							<div className="p-6">
 								<div className="flex items-center justify-between mb-6">
-									<h3 className="text-lg font-bold text-[#0A1628]">
+									<h3 className="text-lg font-bold text-[#0A1628] dark:text-white">
 										{editingStaff ? "Edit Staff" : "Add Staff"}
 									</h3>
 									<button

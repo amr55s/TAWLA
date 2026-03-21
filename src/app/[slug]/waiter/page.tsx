@@ -52,6 +52,7 @@ export default function WaiterDashboardPage({
 	const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
 	const [activeOrders, setActiveOrders] = useState<any[]>([]);
 	const [activeCalls, setActiveCalls] = useState<any[]>([]);
+	const [physicalTables, setPhysicalTables] = useState<{id: string, table_number: number}[]>([]);
 	const [tableMap, setTableMap] = useState<Record<string, number>>({});
 	const [isLoading, setIsLoading] = useState(true);
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -129,9 +130,12 @@ export default function WaiterDashboardPage({
 					.from("tables")
 					.select("id, table_number")
 					.eq("restaurant_id", restaurantData.id);
-				tablesData?.forEach((t) => {
-					map[t.id] = t.table_number;
-				});
+				if (tablesData) {
+					setPhysicalTables(tablesData);
+					tablesData.forEach((t) => {
+						map[t.id] = t.table_number;
+					});
+				}
 			} catch (e) {
 				console.error("Tables fetch soft fail", e);
 			}
@@ -172,11 +176,13 @@ export default function WaiterDashboardPage({
 	}, [slug, router]);
 
 	const tables = React.useMemo(() => {
-		const tableCount = restaurant?.table_count || 0;
 		const dynamicTables: TableWithStatus[] = [];
-		if (!tableCount) return dynamicTables;
+		if (physicalTables.length === 0) return dynamicTables;
 
-		for (let i = 1; i <= tableCount; i++) {
+		const sortedTables = [...physicalTables].sort((a, b) => a.table_number - b.table_number);
+
+		for (const pt of sortedTables) {
+			const i = pt.table_number;
 			let status: TableStatus = "empty";
 			const getTableNum = (item: any) =>
 				item.tables?.table_number || tableMap[item.table_id];
@@ -207,7 +213,7 @@ export default function WaiterDashboardPage({
 			});
 		}
 		return dynamicTables;
-	}, [restaurant?.table_count, activeOrders, activeCalls, tableMap]);
+	}, [physicalTables, activeOrders, activeCalls, tableMap]);
 
 	const filteredTables = React.useMemo(() => {
 		if (statusFilter === "all") return tables;
@@ -532,13 +538,13 @@ export default function WaiterDashboardPage({
 	const getCardStyle = (status: TableStatus) => {
 		switch (status) {
 			case "calling":
-				return "bg-red-50 border-red-400 text-red-700 shadow-[0_0_20px_rgba(248,113,113,0.4)]";
+				return "bg-red-50 dark:bg-red-500/10 border-red-500 dark:border-red-500/50 text-red-700 dark:text-red-400 shadow-[0_0_20px_rgba(239,68,68,0.4)]";
 			case "pending":
-				return "bg-[#E8F4FD] border-[#3282B8] text-[#0F4C75]";
+				return "bg-orange-50 dark:bg-orange-500/10 border-orange-400 dark:border-orange-500/50 text-orange-700 dark:text-orange-400";
 			case "active":
-				return "bg-[#F0F9FF] border-[#0F4C75] text-[#0F4C75]";
+				return "bg-amber-50 dark:bg-amber-500/10 border-amber-400 dark:border-amber-500/50 text-amber-700 dark:text-amber-400";
 			default:
-				return "bg-[#F8FAFC] border-[#E2E8F0] text-[#94A3B8]";
+				return "bg-[#F8FAFC] dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400";
 		}
 	};
 
@@ -559,7 +565,7 @@ export default function WaiterDashboardPage({
 			case "active":
 				return "Active";
 			default:
-				return "Empty";
+				return "Free";
 		}
 	};
 

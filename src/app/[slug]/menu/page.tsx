@@ -1,10 +1,6 @@
 import { notFound } from "next/navigation";
-import {
-	getCategoriesByRestaurant,
-	getMenuItemsByRestaurant,
-	getRestaurantBySlug,
-} from "@/lib/data/restaurants";
-import { MenuContentClient } from "./MenuContentClient";
+import { getRestaurantBySlug } from "@/lib/data/restaurants";
+import MenuList from "@/components/menu/MenuList";
 
 export default async function MenuPage({
 	params,
@@ -19,16 +15,9 @@ export default async function MenuPage({
 		notFound();
 	}
 
-	const [categories, menuItems] = await Promise.all([
-		getCategoriesByRestaurant(restaurant.id),
-		getMenuItemsByRestaurant(restaurant.id),
-	]);
-
 	return (
-		<MenuContentClient
-			restaurant={restaurant}
-			categories={categories}
-			menuItems={menuItems}
+		<MenuList
+			restaurantId={restaurant.id}
 			slug={slug}
 		/>
 	);

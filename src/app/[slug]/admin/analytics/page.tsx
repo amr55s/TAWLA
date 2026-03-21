@@ -6,7 +6,7 @@ export default function AdminAnalyticsPage() {
 	return (
 		<div className="space-y-6">
 			<div>
-				<h1 className="text-xl font-bold text-[#0A1628] tracking-tight">
+				<h1 className="text-xl font-bold text-[#0A1628] dark:text-white tracking-tight">
 					Analytics
 				</h1>
 				<p className="text-xs text-[#7B8BA3] mt-1">
@@ -14,11 +14,11 @@ export default function AdminAnalyticsPage() {
 				</p>
 			</div>
 
-			<div className="bg-white rounded-2xl border border-[#E8ECF1] p-12 text-center">
+			<div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-12 text-center">
 				<div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#0F4C75]/10 to-[#3282B8]/10 flex items-center justify-center mx-auto mb-5">
 					<BarChart3 size={28} className="text-[#3282B8]" />
 				</div>
-				<h2 className="text-lg font-bold text-[#0A1628] mb-2">
+				<h2 className="text-lg font-bold text-[#0A1628] dark:text-white mb-2">
 					Analytics Coming Soon
 				</h2>
 				<p className="text-sm text-[#7B8BA3] max-w-md mx-auto mb-6">

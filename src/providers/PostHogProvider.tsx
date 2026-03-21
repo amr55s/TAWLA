@@ -30,6 +30,12 @@ export function PostHogProvider({ children }: PostHogProviderProps) {
 			return;
 		}
 
+		// Prevent hanging and AbortErrors by entirely skipping tracking locally
+		if (process.env.NODE_ENV === "development") {
+			console.log("PostHog initialization skipped in development environment.");
+			return;
+		}
+
 		posthog.init(posthogKey, {
 			api_host: posthogHost,
 			autocapture: true,

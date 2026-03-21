@@ -87,7 +87,7 @@ export async function getTablesByRestaurantClient(
 ): Promise<Table[]> {
 	const { data, error } = await supabase
 		.from("tables")
-		.select("id, restaurant_id, table_number, qr_code_data, qr_code_url")
+		.select("id, restaurant_id, table_number, qr_code_url")
 		.eq("restaurant_id", restaurantId)
 		.order("table_number", { ascending: true });
 
@@ -269,7 +269,7 @@ export async function getTableByNumberClient(
 ): Promise<Table | null> {
 	const { data, error } = await supabase
 		.from("tables")
-		.select("id, restaurant_id, table_number, qr_code_data, qr_code_url")
+		.select("id, restaurant_id, table_number, qr_code_url")
 		.eq("restaurant_id", restaurantId)
 		.eq("table_number", tableNumber)
 		.single();

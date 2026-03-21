@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Delete, Lock, Sparkles } from "lucide-react";
+import { Delete, Lock, Sparkles, User, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
@@ -21,6 +21,8 @@ export default function UnifiedStaffLogin({
 
 	const [restaurantId, setRestaurantId] = useState<string | null>(null);
 	const [restaurantName, setRestaurantName] = useState<string>("");
+	const [name, setName] = useState("");
+	const [role, setRole] = useState<"waiter" | "cashier">("waiter");
 	const [pin, setPin] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [initializing, setInitializing] = useState(true);
@@ -43,9 +45,6 @@ export default function UnifiedStaffLogin({
 		if (loading || pin.length >= 4) return;
 		const newPin = pin + digit;
 		setPin(newPin);
-		if (newPin.length === 4) {
-			verifyPin(newPin);
-		}
 	};
 
 	const handleDelete = () => {
@@ -53,48 +52,51 @@ export default function UnifiedStaffLogin({
 		setPin(pin.slice(0, -1));
 	};
 
-	// ── STAFF LOGIN: Only queries public.restaurant_staff — no Supabase Auth ──
-	const verifyPin = async (currentPin: string) => {
-		if (!restaurantId) return;
+	const handleLogin = async () => {
+		if (!restaurantId || !name.trim() || pin.length < 4) {
+			toast.error("Please fill in all fields (Name and 4-digit PIN)");
+			return;
+		}
 		setLoading(true);
 
 		try {
-			const { data: staff, error } = await supabase
+			// Query precisely for Name, Role, and PIN
+			const { data: staff, error: staffError } = await supabase
 				.from("restaurant_staff")
-				.select("id, name, role, restaurant_id")
+				.select("id, name, role, pin_code, restaurant_id")
 				.eq("restaurant_id", restaurantId)
-				.eq("pin_code", currentPin)
-				.single();
+				.eq("name", name.trim())
+				.eq("role", role)
+				.eq("pin_code", pin)
+				.maybeSingle();
 
-			if (error || !staff) {
+			if (staffError || !staff) {
+				toast.error("Invalid credentials. Please check your Name, Role, and PIN.");
 				triggerError();
 				return;
 			}
 
-			// Mark as active
+			// Success - Mark as active
 			await supabase
 				.from("restaurant_staff")
 				.update({ is_active: true })
 				.eq("id", staff.id)
 				.eq("restaurant_id", restaurantId);
 
-			// Persist session locally — role-scoped per restaurant
-			localStorage.setItem(
-				`tawla_staff_${restaurantId}_${staff.role}`,
-				staff.id,
-			);
+			// Persist session
+			localStorage.setItem(`tawla_staff_${restaurantId}_${staff.role}`, staff.id);
 
 			posthog.identify(`staff_${staff.id}`, {
 				staff_name: staff.name,
 				role: staff.role,
 				restaurant_id: staff.restaurant_id,
 			});
-			posthog.capture("staff_pin_login", {
+			posthog.capture("staff_login_v2", {
 				role: staff.role,
 				restaurant_slug: slug,
 			});
 
-			toast.success(`Welcome, ${staff.name}!`);
+			toast.success(`Welcome back, ${staff.name}!`);
 
 			if (staff.role === "waiter") {
 				router.push(`/${slug}/waiter`);
@@ -104,7 +106,7 @@ export default function UnifiedStaffLogin({
 				router.push(`/${slug}`);
 			}
 		} catch (err) {
-			console.error("Staff PIN verification error:", err);
+			console.error("Staff login error:", err);
 			posthog.captureException(err);
 			triggerError();
 		} finally {
@@ -113,7 +115,6 @@ export default function UnifiedStaffLogin({
 	};
 
 	function triggerError() {
-		toast.error("Invalid PIN code");
 		setErrorShake(true);
 		setTimeout(() => {
 			setErrorShake(false);
@@ -121,119 +122,127 @@ export default function UnifiedStaffLogin({
 		}, 500);
 	}
 
-	// ── Always render the same outer HTML structure (prevents hydration mismatch) ──
 	return (
-		<div className="min-h-screen flex" suppressHydrationWarning>
-			{/* Left — Brand Panel (hidden on mobile, shown on lg+) */}
-			<div className="hidden lg:flex lg:w-[45%] relative bg-gradient-to-br from-[#0F4C75] via-[#0A3558] to-[#071A2E] flex-col justify-between p-12 overflow-hidden">
-				{/* Decorative blurs */}
-				<div className="absolute top-[15%] right-[-10%] w-[400px] h-[400px] rounded-full bg-[#3282B8]/10 blur-[100px]" />
-				<div className="absolute bottom-[20%] left-[-5%] w-[300px] h-[300px] rounded-full bg-[#BBE1FA]/8 blur-[80px]" />
-
-				<div className="relative z-10">
-					<Link
-						href="/"
-						className="text-2xl font-bold text-white tracking-tight"
-					>
-						Tawla
-					</Link>
-				</div>
-
-				<div className="relative z-10 space-y-6">
-					<div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/15 text-[#BBE1FA] text-xs font-semibold tracking-wider uppercase">
-						<Sparkles size={12} />
-						Staff Portal
+		<div className="min-h-screen flex items-center justify-center bg-gray-50 p-4" suppressHydrationWarning>
+			{/* Main Login Card */}
+			<div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8 md:p-10 flex flex-col gap-8">
+				
+				{/* Header Section */}
+				<div className="flex flex-col items-center text-center gap-4">
+					<div className="w-16 h-16 bg-[#0F4C75] rounded-2xl flex items-center justify-center shadow-md">
+						<Lock className="w-8 h-8 text-white" />
 					</div>
-					<h2 className="text-4xl lg:text-5xl font-bold text-white leading-[1.1] tracking-tight">
-						Your restaurant,
-						<br />
-						<span className="text-[#BBE1FA]">reimagined.</span>
-					</h2>
-					<p className="text-base text-[#BBE1FA]/70 max-w-md leading-relaxed">
-						Access your intelligent dashboard. Real-time operations and
-						autonomous tracking — all in one place.
-					</p>
-				</div>
-
-				<div className="relative z-10">
-					<p className="text-xs text-white/30">
-						© 2026 Tawla. All rights reserved.
-					</p>
-				</div>
-			</div>
-
-			{/* Right — PIN Form */}
-			<div className="flex-1 flex items-center justify-center px-6 py-12 bg-[#F8FAFB]">
-				<div className="w-full max-w-sm mx-auto flex flex-col items-center">
-					{/* Mobile logo */}
-					<Link
-						href="/"
-						className="lg:hidden text-2xl font-bold text-[#0F4C75] tracking-tight block mb-8"
-					>
-						Tawla
-					</Link>
-
-					<div className="text-center mb-10 w-full">
-						<div className="w-16 h-16 bg-[#0F4C75]/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-							<Lock className="w-8 h-8 text-[#0F4C75]" />
-						</div>
-						<h1 className="text-2xl font-bold text-[#0A1628] mb-1">
+					<div>
+						<h1 className="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight">
 							Staff Login
 						</h1>
 						{restaurantName && (
-							<p className="text-sm font-semibold text-[#0F4C75]">
-								{restaurantName}
-							</p>
+							<div className="inline-flex items-center gap-2 mt-2 px-3 py-1 rounded-full bg-gray-100 border border-gray-200">
+								<span className="w-2 h-2 rounded-full bg-[#0F4C75]" />
+								<p className="text-xs md:text-sm font-semibold text-gray-600 uppercase tracking-wider">
+									{restaurantName}
+								</p>
+							</div>
 						)}
-						<p className="text-sm text-[#5A6B82] mt-1">
-							Enter your 4-digit PIN to access your dashboard
+					</div>
+				</div>
+
+				{initializing ? (
+					<div className="flex flex-col items-center justify-center py-12 gap-4">
+						<div className="w-8 h-8 border-3 border-[#0F4C75] border-t-transparent rounded-full animate-spin" />
+						<p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+							Loading...
 						</p>
 					</div>
-
-					{/* Show spinner while loading restaurant, or the pin pad once ready */}
-					{initializing ? (
-						<div className="flex items-center justify-center py-16">
-							<div className="w-8 h-8 border-2 border-[#0F4C75] border-t-transparent rounded-full animate-spin" />
+				) : (
+					<div className="flex flex-col gap-6">
+						{/* Name Input */}
+						<div className="flex flex-col gap-2">
+							<label className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-widest pl-1">
+								<User size={14} />
+								Name
+							</label>
+							<input
+								type="text"
+								value={name}
+								onChange={(e) => setName(e.target.value)}
+								placeholder="Enter your full name"
+								className="w-full h-14 bg-gray-50 border border-gray-200 rounded-xl px-5 text-gray-900 font-semibold text-base
+                                           focus:bg-white focus:border-[#0F4C75] focus:ring-2 focus:ring-[#0F4C75]/20 transition-all outline-none placeholder:text-gray-400"
+							/>
 						</div>
-					) : (
-						<>
-							{/* PIN dots */}
+
+						{/* Role Toggle */}
+						<div className="flex flex-col gap-2">
+							<label className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-1">
+								Role
+							</label>
+							<div className="relative flex p-1 bg-gray-100 rounded-xl border border-gray-200">
+								{(["waiter", "cashier"] as const).map((r) => (
+									<button
+										key={r}
+										onClick={() => setRole(r)}
+										className={`relative flex-1 h-12 rounded-lg text-sm font-bold capitalize transition-all z-10 ${
+											role === r ? "text-gray-900" : "text-gray-500 hover:text-gray-700"
+										}`}
+									>
+										{r}
+									</button>
+								))}
+								<motion.div
+									className="absolute top-1 left-1 bottom-1 bg-white rounded-lg shadow-sm"
+									initial={false}
+									animate={{
+										x: role === "waiter" ? "0%" : "100%",
+										width: "calc(50% - 4px)",
+									}}
+									transition={{ type: "spring", stiffness: 300, damping: 30 }}
+								/>
+							</div>
+						</div>
+
+						{/* PIN Section */}
+						<div className="flex flex-col gap-6">
+							<label className="text-xs font-bold text-gray-500 uppercase tracking-widest text-center mt-2">
+								Enter 4-Digit PIN
+							</label>
+
 							<motion.div
 								animate={errorShake ? { x: [-10, 10, -10, 10, 0] } : {}}
 								transition={{ duration: 0.4 }}
-								className="flex justify-center gap-4 mb-10"
+								className="flex justify-center gap-4"
 							>
 								{[0, 1, 2, 3].map((index) => (
 									<div
 										key={index}
-										className={`w-4 h-4 rounded-full transition-all duration-300 ${
+										className={`w-3.5 h-3.5 rounded-full transition-all duration-300 ${
 											index < pin.length
-												? "bg-[#0F4C75] scale-110 shadow-[0_2px_8px_rgba(15,76,117,0.4)]"
-												: "bg-[#E8ECF1] scale-100"
+												? "bg-[#0F4C75] scale-110 shadow-sm"
+												: "bg-gray-200 scale-100"
 										}`}
 									/>
 								))}
 							</motion.div>
 
-							{/* Numeric keypad */}
-							<div className="grid grid-cols-3 gap-4 w-full">
+							{/* Keypad */}
+							<div className="grid grid-cols-3 gap-3 mx-auto w-full max-w-[280px]">
 								{[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
 									<motion.button
 										key={num}
 										whileTap={{ scale: 0.95 }}
 										onClick={() => handleInput(num.toString())}
 										disabled={loading}
-										className="h-[68px] rounded-2xl bg-white border border-[#E8ECF1] text-[28px] font-semibold text-[#0A1628] shadow-sm hover:bg-[#F8FAFC] hover:border-[#BBE1FA] hover:text-[#0F4C75] transition-all focus:outline-none"
+										className="aspect-square rounded-2xl bg-white border border-gray-200 text-2xl font-semibold text-gray-800 hover:bg-gray-50 active:bg-gray-100 transition-colors focus:outline-none shadow-sm flex items-center justify-center"
 									>
 										{num}
 									</motion.button>
 								))}
-								<div /> {/* bottom-left spacer */}
+								<div />
 								<motion.button
 									whileTap={{ scale: 0.95 }}
 									onClick={() => handleInput("0")}
 									disabled={loading}
-									className="h-[68px] rounded-2xl bg-white border border-[#E8ECF1] text-[28px] font-semibold text-[#0A1628] shadow-sm hover:bg-[#F8FAFC] hover:border-[#BBE1FA] hover:text-[#0F4C75] transition-all focus:outline-none"
+									className="aspect-square rounded-2xl bg-white border border-gray-200 text-2xl font-semibold text-gray-800 hover:bg-gray-50 active:bg-gray-100 transition-colors focus:outline-none shadow-sm flex items-center justify-center"
 								>
 									0
 								</motion.button>
@@ -241,23 +250,37 @@ export default function UnifiedStaffLogin({
 									whileTap={{ scale: 0.95 }}
 									onClick={handleDelete}
 									disabled={loading || pin.length === 0}
-									className="h-[68px] rounded-2xl bg-white border border-[#E8ECF1] flex items-center justify-center text-[#5A6B82] shadow-sm hover:bg-[#F8FAFC] hover:border-red-200 hover:text-red-500 transition-all focus:outline-none"
+									className="aspect-square rounded-2xl bg-white border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-rose-50 hover:border-rose-100 hover:text-rose-500 active:bg-rose-100 transition-colors focus:outline-none shadow-sm disabled:opacity-50 disabled:hover:bg-white"
 								>
-									<Delete strokeWidth={2.5} size={28} />
+									<Delete size={24} />
 								</motion.button>
 							</div>
+						</div>
 
-							<div className="mt-10 h-8 flex items-center justify-center">
-								{loading && (
-									<div className="flex items-center gap-2 text-sm text-[#0F4C75] font-semibold">
-										<div className="w-4 h-4 border-2 border-[#0F4C75] border-t-transparent rounded-full animate-spin" />
-										Verifying PIN...
-									</div>
-								)}
-							</div>
-						</>
-					)}
-				</div>
+						{/* Submit Button */}
+						<motion.button
+							whileHover={{ scale: 1.01 }}
+							whileTap={{ scale: 0.98 }}
+							onClick={handleLogin}
+							disabled={loading || !name.trim() || pin.length < 4}
+							className="w-full h-14 bg-[#0F4C75] text-white rounded-xl font-bold text-base shadow-md mt-4 
+                                       disabled:opacity-50 transition-all flex items-center justify-center gap-3 group"
+						>
+							{loading ? (
+								<div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+							) : (
+								<>
+									Login
+									<ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
+								</>
+							)}
+						</motion.button>
+					</div>
+				)}
+				
+				<p className="mt-4 text-center text-[10px] text-gray-400 font-semibold uppercase tracking-widest">
+					Powered by Tawla
+				</p>
 			</div>
 		</div>
 	);

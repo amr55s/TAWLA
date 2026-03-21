@@ -73,7 +73,7 @@ function ColorField({
 					value={value}
 					onChange={(e) => onChange(e.target.value)}
 					placeholder="#000000"
-					className="flex-1 py-2.5 px-3 bg-[#F8FAFC] border border-[#E8ECF1] rounded-xl text-sm text-[#0A1628] font-mono focus:outline-none focus:ring-2 focus:ring-[#0F4C75]/20 focus:border-[#0F4C75] transition-colors"
+					className="flex-1 py-2.5 px-3 bg-[#F8FAFC] border border-[#E8ECF1] rounded-xl text-sm text-[#0A1628] dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-[#0F4C75]/20 focus:border-[#0F4C75] transition-colors"
 				/>
 			</div>
 		</div>
@@ -95,14 +95,14 @@ function SectionCard({
 		<motion.div
 			initial={{ opacity: 0, y: 12 }}
 			animate={{ opacity: 1, y: 0 }}
-			className="bg-white border border-[#E8ECF1] rounded-2xl shadow-sm overflow-hidden"
+			className="bg-white dark:bg-gray-800 border border-[#E8ECF1] dark:border-gray-700 rounded-2xl shadow-sm overflow-hidden"
 		>
 			<div className="px-6 py-5 border-b border-[#F1F5F9] flex items-center gap-3">
 				<div className="w-10 h-10 rounded-xl bg-[#E8F4FD] flex items-center justify-center flex-shrink-0">
 					<Icon size={18} className="text-[#0F4C75]" />
 				</div>
 				<div>
-					<h3 className="text-sm font-bold text-[#0A1628]">{title}</h3>
+					<h3 className="text-sm font-bold text-[#0A1628] dark:text-white">{title}</h3>
 					<p className="text-xs text-[#64748B]">{description}</p>
 				</div>
 			</div>
@@ -349,7 +349,7 @@ export default function AdminSettingsPage() {
 					<div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
 						<AlertCircle size={24} className="text-red-500" />
 					</div>
-					<h3 className="text-base font-bold text-[#0A1628] mb-2">
+					<h3 className="text-base font-bold text-[#0A1628] dark:text-white mb-2">
 						Error loading settings
 					</h3>
 					<p className="text-sm text-[#64748B] mb-5">{fetchError}</p>
@@ -369,7 +369,7 @@ export default function AdminSettingsPage() {
 		<div className="max-w-3xl">
 			{/* Page Header */}
 			<div className="mb-8">
-				<h1 className="text-2xl font-black text-[#0A1628]">Settings</h1>
+				<h1 className="text-2xl font-black text-[#0A1628] dark:text-white">Settings</h1>
 				{restaurant && (
 					<div className="flex items-center gap-1.5 mt-1 text-sm text-[#64748B]">
 						<span className="font-semibold text-[#0F4C75]">
@@ -408,7 +408,7 @@ export default function AdminSettingsPage() {
 						<select
 							value={fontFamily}
 							onChange={(e) => setFontFamily(e.target.value)}
-							className="w-full py-2.5 px-3 bg-[#F8FAFC] border border-[#E8ECF1] rounded-xl text-sm text-[#0A1628] focus:outline-none focus:ring-2 focus:ring-[#0F4C75]/20 focus:border-[#0F4C75] transition-colors"
+							className="w-full py-2.5 px-3 bg-[#F8FAFC] border border-[#E8ECF1] rounded-xl text-sm text-[#0A1628] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0F4C75]/20 focus:border-[#0F4C75] transition-colors"
 						>
 							{FONT_OPTIONS.map((f) => (
 								<option key={f.value} value={f.value}>
@@ -491,7 +491,7 @@ export default function AdminSettingsPage() {
 							max="200"
 							value={tableCount}
 							onChange={(e) => setTableCount(Number(e.target.value))}
-							className="w-full py-2.5 px-3 bg-[#F8FAFC] border border-[#E8ECF1] rounded-xl text-sm text-[#0A1628] focus:outline-none focus:ring-2 focus:ring-[#0F4C75]/20 focus:border-[#0F4C75] transition-colors"
+							className="w-full py-2.5 px-3 bg-[#F8FAFC] border border-[#E8ECF1] rounded-xl text-sm text-[#0A1628] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0F4C75]/20 focus:border-[#0F4C75] transition-colors"
 							placeholder="e.g. 15"
 						/>
 						<p className="text-[11px] text-[#64748B] mt-1.5">
@@ -536,7 +536,7 @@ export default function AdminSettingsPage() {
 							value={baseUrl}
 							onChange={(e) => setBaseUrl(e.target.value)}
 							placeholder="http://192.168.1.x:3000"
-							className="w-full py-2.5 px-3 bg-[#F8FAFC] border border-[#E8ECF1] rounded-xl text-sm text-[#0A1628] font-mono focus:outline-none focus:ring-2 focus:ring-[#0F4C75]/20 focus:border-[#0F4C75] transition-colors"
+							className="w-full py-2.5 px-3 bg-[#F8FAFC] border border-[#E8ECF1] rounded-xl text-sm text-[#0A1628] dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-[#0F4C75]/20 focus:border-[#0F4C75] transition-colors"
 							style={{ direction: "ltr" }}
 						/>
 						<p className="text-[11px] text-[#64748B] mt-1.5">
@@ -547,7 +547,7 @@ export default function AdminSettingsPage() {
 					<div className="flex flex-col items-center gap-5 pt-2">
 						<div
 							ref={qrRef}
-							className="bg-white border-2 border-[#E8ECF1] rounded-2xl p-6 shadow-sm"
+							className="bg-white dark:bg-gray-800 border-2 border-[#E8ECF1] dark:border-gray-700 rounded-2xl p-6 shadow-sm"
 						>
 							{qrValue ? (
 								<QRCodeSVG
