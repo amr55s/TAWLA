@@ -20,6 +20,25 @@ import { toast } from "sonner";
 import { getRestaurantBySlugClient } from "@/lib/data/orders.client";
 import { createClient } from "@/lib/supabase/client";
 import type { OrderWithItems, Restaurant } from "@/types/database";
+import { useAudioAlert } from "@/hooks/useAudioAlert";
+import { useSmartPresence } from "@/hooks/useSmartPresence";
+import { useRestaurantRealtime } from "@/hooks/useRestaurantRealtime";
+import { logger } from "@/lib/logger";
+
+interface WaiterActiveOrder {
+	id: string;
+	table_id: string;
+	status: string;
+	tables: { table_number: number };
+}
+
+interface WaiterActiveCall {
+	id: string;
+	table_id: string;
+	type: string;
+	status: string;
+	tables: { table_number: number };
+}
 
 const supabase = createClient();
 const WAITER_ACTIVE_ORDER_STATUSES = [
@@ -50,12 +69,19 @@ export default function WaiterDashboardPage({
 	const { slug } = React.use(params);
 
 	const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
-	const [activeOrders, setActiveOrders] = useState<any[]>([]);
-	const [activeCalls, setActiveCalls] = useState<any[]>([]);
-	const [physicalTables, setPhysicalTables] = useState<{id: string, table_number: number}[]>([]);
+	const [activeOrders, setActiveOrders] = useState<WaiterActiveOrder[]>([]);
+	const [activeCalls, setActiveCalls] = useState<WaiterActiveCall[]>([]);
+    const [physicalTables, setPhysicalTables] = useState<{id: string, table_number: number}[]>([]);
 	const [tableMap, setTableMap] = useState<Record<string, number>>({});
 	const [isLoading, setIsLoading] = useState(true);
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+	// Add Silent Smart Presence Tracker
+	const staffId =
+		typeof window !== "undefined" && restaurant?.id
+			? localStorage.getItem(`tawla_staff_${restaurant.id}_waiter`)
+			: null;
+	useSmartPresence(staffId, restaurant?.id || null);
 
 	// Modal State
 	const [selectedTable, setSelectedTable] = useState<TableWithStatus | null>(
@@ -67,41 +93,8 @@ export default function WaiterDashboardPage({
 	const [isClearing, setIsClearing] = useState(false);
 	const [isResolving, setIsResolving] = useState(false);
 
-	// Audio state
-	const [audioEnabled, setAudioEnabled] = useState(false);
-
-	const playNotificationSound = () => {
-		if (!audioEnabled) return;
-		try {
-			const AudioContext =
-				window.AudioContext || (window as any).webkitAudioContext;
-			if (!AudioContext) return;
-			const ctx = new AudioContext();
-			const osc = ctx.createOscillator();
-			const gain = ctx.createGain();
-			osc.connect(gain);
-			gain.connect(ctx.destination);
-			osc.type = "sine";
-			osc.frequency.setValueAtTime(880, ctx.currentTime);
-			gain.gain.setValueAtTime(0.2, ctx.currentTime);
-			osc.start();
-			osc.stop(ctx.currentTime + 0.3);
-		} catch (e) {
-			console.error("Audio play failed", e);
-		}
-	};
-
-	const enableAudio = () => {
-		setAudioEnabled(true);
-		try {
-			const AudioContext =
-				window.AudioContext || (window as any).webkitAudioContext;
-			if (AudioContext) {
-				const ctx = new AudioContext();
-				ctx.resume();
-			}
-		} catch (e) {}
-	};
+	// Custom Engine Hooks
+	const { audioEnabled, enableAudio, playNotificationSound } = useAudioAlert();
 
 	const loadData = React.useCallback(async () => {
 		try {
@@ -130,14 +123,14 @@ export default function WaiterDashboardPage({
 					.from("tables")
 					.select("id, table_number")
 					.eq("restaurant_id", restaurantData.id);
-				if (tablesData) {
-					setPhysicalTables(tablesData);
-					tablesData.forEach((t) => {
-						map[t.id] = t.table_number;
-					});
-				}
+                if (tablesData) {
+                    setPhysicalTables(tablesData);
+                    tablesData.forEach((t) => {
+                        map[t.id] = t.table_number;
+                    });
+                }
 			} catch (e) {
-				console.error("Tables fetch soft fail", e);
+				logger.warn("Tables fetch soft fail", { error: e });
 			}
 
 			setTableMap(map);
@@ -151,7 +144,7 @@ export default function WaiterDashboardPage({
 
 				if (!ordersError && activeOrdersList) orders = activeOrdersList;
 			} catch (e) {
-				console.error("Orders fetch soft fail", e);
+				logger.warn("Orders fetch soft fail", { error: e });
 			}
 
 			try {
@@ -163,13 +156,13 @@ export default function WaiterDashboardPage({
 
 				if (!callsError && activeCallsList) calls = activeCallsList;
 			} catch (e) {
-				console.error("Calls fetch soft fail", e);
+				logger.warn("Calls fetch soft fail", { error: e });
 			}
 
 			setActiveOrders(orders);
 			setActiveCalls(calls);
 		} catch (error) {
-			console.error("Error loading data:", error);
+			logger.error("Error loading server data:", error);
 		} finally {
 			setIsLoading(false);
 		}
@@ -224,94 +217,41 @@ export default function WaiterDashboardPage({
 		loadData();
 	}, [loadData]);
 
-	useEffect(() => {
-		if (!restaurant?.id) return;
-
-		const ordersSubscription = supabase
-			.channel(`waiter-orders-${restaurant.id}`)
-			.on(
-				"postgres_changes",
-				{
-					event: "*",
-					schema: "public",
-					table: "orders",
-					filter: `restaurant_id=eq.${restaurant.id}`,
-				},
-				(payload) => {
-					if (payload.eventType === "INSERT") playNotificationSound();
-					setActiveOrders((prev) => {
-						if (payload.eventType === "INSERT") return [payload.new, ...prev];
-						if (payload.eventType === "UPDATE") {
-							const exists = prev.some((o) => o.id === payload.new.id);
-							if (exists)
-								return prev.map((o) =>
-									o.id === payload.new.id ? { ...o, ...payload.new } : o,
-								);
-							return [payload.new, ...prev];
-						}
-						if (payload.eventType === "DELETE")
-							return prev.filter((o) => o.id !== payload.old.id);
-						return prev;
-					});
-				},
-			)
-			.subscribe();
-
-		const callsSubscription = supabase
-			.channel(`waiter-calls-${restaurant.id}`)
-			.on(
-				"postgres_changes",
-				{
-					event: "*",
-					schema: "public",
-					table: "waiter_calls",
-					filter: `restaurant_id=eq.${restaurant.id}`,
-				},
-				(payload) => {
-					if (payload.eventType === "INSERT") playNotificationSound();
-					setActiveCalls((prev) => {
-						if (payload.eventType === "INSERT") return [payload.new, ...prev];
-						if (payload.eventType === "UPDATE") {
-							const exists = prev.some((c) => c.id === payload.new.id);
-							if (exists)
-								return prev.map((c) =>
-									c.id === payload.new.id ? { ...c, ...payload.new } : c,
-								);
-							return [payload.new, ...prev];
-						}
-						if (payload.eventType === "DELETE")
-							return prev.filter((c) => c.id !== payload.old.id);
-						return prev;
-					});
-				},
-			)
-			.subscribe();
-
-		const restaurantSubscription = supabase
-			.channel(`waiter-restaurant-${restaurant.id}`)
-			.on(
-				"postgres_changes",
-				{
-					event: "UPDATE",
-					schema: "public",
-					table: "restaurants",
-					filter: `id=eq.${restaurant.id}`,
-				},
-				(payload) => {
-					setRestaurant((prev) => ({
-						...(prev as any),
-						...(payload.new as any),
-					}));
-				},
-			)
-			.subscribe();
-
-		return () => {
-			supabase.removeChannel(ordersSubscription);
-			supabase.removeChannel(callsSubscription);
-			supabase.removeChannel(restaurantSubscription);
-		};
-	}, [restaurant?.id, audioEnabled, tableMap]);
+	useRestaurantRealtime(restaurant?.id, {
+		onOrderChange: React.useCallback((payload: any) => {
+			if (payload.eventType === "INSERT") playNotificationSound();
+			setActiveOrders((prev) => {
+				if (payload.eventType === "INSERT") return [payload.new as WaiterActiveOrder, ...prev];
+				if (payload.eventType === "UPDATE") {
+					const exists = prev.some((o) => o.id === payload.new.id);
+					if (exists)
+						return prev.map((o) => o.id === payload.new.id ? { ...o, ...payload.new } : o);
+					return [payload.new as WaiterActiveOrder, ...prev];
+				}
+				if (payload.eventType === "DELETE") return prev.filter((o) => o.id !== payload.old.id);
+				return prev;
+			});
+		}, [playNotificationSound]),
+		
+		onCallChange: React.useCallback((payload: any) => {
+			if (payload.eventType === "INSERT") playNotificationSound();
+			setActiveCalls((prev) => {
+				if (payload.eventType === "INSERT") return [payload.new as WaiterActiveCall, ...prev];
+				if (payload.eventType === "UPDATE") {
+					const exists = prev.some((c) => c.id === payload.new.id);
+					if (exists)
+						return prev.map((c) => c.id === payload.new.id ? { ...c, ...payload.new } : c);
+					return [payload.new as WaiterActiveCall, ...prev];
+				}
+				if (payload.eventType === "DELETE") return prev.filter((c) => c.id !== payload.old.id);
+				return prev;
+			});
+		}, [playNotificationSound]),
+		
+		onRestaurantChange: React.useCallback((payload: any) => {
+			setRestaurant((prev) => ({ ...(prev as any), ...(payload.new as any) }));
+		}, [])
+	});
 
 	const getOrderTableNum = (o: any): string =>
 		String(o.tables?.table_number ?? tableMap[o.table_id] ?? "");
@@ -538,13 +478,13 @@ export default function WaiterDashboardPage({
 	const getCardStyle = (status: TableStatus) => {
 		switch (status) {
 			case "calling":
-				return "bg-red-50 dark:bg-red-500/10 border-red-500 dark:border-red-500/50 text-red-700 dark:text-red-400 shadow-[0_0_20px_rgba(239,68,68,0.4)]";
+				return "bg-red-50 border-red-400 text-red-700 shadow-[0_0_20px_rgba(248,113,113,0.4)]";
 			case "pending":
-				return "bg-orange-50 dark:bg-orange-500/10 border-orange-400 dark:border-orange-500/50 text-orange-700 dark:text-orange-400";
+				return "bg-[#E8F4FD] border-[#3282B8] text-[#0F4C75]";
 			case "active":
-				return "bg-amber-50 dark:bg-amber-500/10 border-amber-400 dark:border-amber-500/50 text-amber-700 dark:text-amber-400";
+				return "bg-[#F0F9FF] border-[#0F4C75] text-[#0F4C75]";
 			default:
-				return "bg-[#F8FAFC] dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400";
+				return "bg-[#F8FAFC] border-[#E2E8F0] text-[#94A3B8]";
 		}
 	};
 
@@ -565,7 +505,7 @@ export default function WaiterDashboardPage({
 			case "active":
 				return "Active";
 			default:
-				return "Free";
+				return "Empty";
 		}
 	};
 
@@ -605,43 +545,43 @@ export default function WaiterDashboardPage({
 		count: number;
 		color: string;
 	}[] = [
-		{
-			value: "all",
-			label: "All",
-			count: tables.length,
-			color: "bg-[#0F4C75] text-white",
-		},
-		{
-			value: "calling",
-			label: (
-				<span className="flex items-center gap-1">
-					<CircleAlert size={14} /> Calls
-				</span>
-			),
-			count: statusCounts.calling,
-			color: "bg-red-500 text-white",
-		},
-		{
-			value: "pending",
-			label: (
-				<span className="flex items-center gap-1">
-					<Clock size={14} /> Pending
-				</span>
-			),
-			count: statusCounts.pending,
-			color: "bg-[#3282B8] text-white",
-		},
-		{
-			value: "active",
-			label: (
-				<span className="flex items-center gap-1">
-					<PlayCircle size={14} /> Active
-				</span>
-			),
-			count: statusCounts.active,
-			color: "bg-teal-500 text-white",
-		},
-	];
+			{
+				value: "all",
+				label: "All",
+				count: tables.length,
+				color: "bg-[#0F4C75] text-white",
+			},
+			{
+				value: "calling",
+				label: (
+					<span className="flex items-center gap-1">
+						<CircleAlert size={14} /> Calls
+					</span>
+				),
+				count: statusCounts.calling,
+				color: "bg-red-500 text-white",
+			},
+			{
+				value: "pending",
+				label: (
+					<span className="flex items-center gap-1">
+						<Clock size={14} /> Pending
+					</span>
+				),
+				count: statusCounts.pending,
+				color: "bg-[#3282B8] text-white",
+			},
+			{
+				value: "active",
+				label: (
+					<span className="flex items-center gap-1">
+						<PlayCircle size={14} /> Active
+					</span>
+				),
+				count: statusCounts.active,
+				color: "bg-teal-500 text-white",
+			},
+		];
 
 	return (
 		<div className="min-h-screen bg-[#F5F7FA] pb-6">
@@ -703,19 +643,17 @@ export default function WaiterDashboardPage({
 						<button
 							key={opt.value}
 							onClick={() => setStatusFilter(opt.value)}
-							className={`px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
-								statusFilter === opt.value
+							className={`px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${statusFilter === opt.value
 									? opt.color + " shadow-md"
 									: "bg-white text-[#64748B] border border-[#E2E8F0] hover:border-[#CBD5E1]"
-							}`}
+								}`}
 						>
 							{opt.label}
 							<span
-								className={`min-w-[20px] h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-									statusFilter === opt.value
+								className={`min-w-[20px] h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${statusFilter === opt.value
 										? "bg-white/25 text-white"
 										: "bg-[#F1F5F9] text-[#64748B]"
-								}`}
+									}`}
 							>
 								{opt.count}
 							</span>

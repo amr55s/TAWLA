@@ -1,14 +1,18 @@
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { Playfair_Display, Plus_Jakarta_Sans, Tajawal, Geist } from "next/font/google";
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 import { PostHogProvider } from "@/providers/PostHogProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import ReactQueryProvider from "@/components/providers/ReactQueryProvider";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const geistSans = Geist({
+	variable: "--font-geist-sans",
+	subsets: ["latin"],
+});
 
 const plusJakartaSans = Plus_Jakarta_Sans({
 	variable: "--font-plus-jakarta-sans",
@@ -59,18 +63,20 @@ export default function RootLayout({
 	children: React.ReactNode;
 }>) {
 	return (
-		<html lang="en" dir="ltr" suppressHydrationWarning className={cn("font-sans", geist.variable)}>
+		<html lang="en" dir="ltr" suppressHydrationWarning>
 			<body
 				suppressHydrationWarning
-				className={`${plusJakartaSans.variable} ${tajawal.variable} ${playfairDisplay.variable} bg-background text-foreground antialiased min-h-screen transition-colors duration-200`}
+				className={`${geistSans.variable} font-sans ${plusJakartaSans.variable} ${tajawal.variable} ${playfairDisplay.variable} bg-background text-foreground antialiased min-h-screen transition-colors duration-200`}
 			>
-				<ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-					<ReactQueryProvider>
-						<PostHogProvider>{children}</PostHogProvider>
-						<Analytics />
-						<Toaster position="top-right" richColors closeButton />
-					</ReactQueryProvider>
-				</ThemeProvider>
+				<TooltipProvider>
+					<ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+						<ReactQueryProvider>
+							<PostHogProvider>{children}</PostHogProvider>
+							<Analytics />
+							<Toaster position="top-right" richColors closeButton />
+						</ReactQueryProvider>
+					</ThemeProvider>
+				</TooltipProvider>
 			</body>
 		</html>
 	);

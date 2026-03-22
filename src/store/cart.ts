@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { v4 as uuidv4 } from "uuid";
 import type { MenuItem } from "@/types/database";
 
 export interface CartItem {
@@ -36,10 +37,7 @@ export const useCartStore = create<CartState>()(
 			items: [],
 			tableNumber: null,
 			restaurantSlug: null,
-			guestId:
-				typeof crypto !== "undefined" && crypto.randomUUID
-					? crypto.randomUUID()
-					: Math.random().toString(36).slice(2),
+			guestId: uuidv4(),
 
 			setTableNumber: (tableNumber: string) => set({ tableNumber }),
 

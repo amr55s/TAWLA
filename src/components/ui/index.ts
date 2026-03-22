@@ -1,7 +1,5 @@
 export { BackButton } from "./BackButton";
 export { BottomSheet } from "./BottomSheet";
-export type { ButtonProps, ButtonSize, ButtonVariant } from "./Button";
-export { Button } from "./Button";
 export { CallWaiterSheet } from "./CallWaiterSheet";
 export { CartItemCard } from "./CartItemCard";
 export { CategoryTabs } from "./CategoryTabs";
@@ -12,9 +10,9 @@ export { MenuItemImage } from "./MenuItemImage";
 export { NumericKeypad } from "./NumericKeypad";
 export { PageHeader } from "./PageHeader";
 export {
-	Skeleton,
-	SkeletonInsightCard,
-	SkeletonLine,
-	SkeletonOrderCard,
-	SkeletonTableCard,
+    Skeleton,
+    SkeletonInsightCard,
+    SkeletonLine,
+    SkeletonOrderCard,
+    SkeletonTableCard,
 } from "./Skeleton";

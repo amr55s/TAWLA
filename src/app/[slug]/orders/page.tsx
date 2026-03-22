@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { useCallback, useEffect, useState } from "react";
-import { SkeletonOrderCard } from "@/components/ui";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { FloatingNavBar } from "@/components/ui/FloatingNavBar";
 import { createClient } from "@/lib/supabase/client";
 import { useCartStore } from "@/store/cart";
@@ -167,7 +167,32 @@ export default function GuestOrdersPage({
 				{loading ? (
 					<div className="space-y-4">
 						{Array.from({ length: 3 }).map((_, i) => (
-							<SkeletonOrderCard key={i} />
+							<div
+								key={i}
+								className="bg-background-card rounded-2xl shadow-card p-4 border border-border-light space-y-4"
+							>
+								<div className="flex items-center justify-between border-b border-border-light pb-3">
+									<div className="space-y-2">
+										<Skeleton className="h-5 w-24 rounded" />
+										<Skeleton className="h-3 w-32 rounded" />
+									</div>
+									<Skeleton className="h-6 w-28 rounded-md" />
+								</div>
+								<div className="space-y-3">
+									<div className="flex items-center justify-between">
+										<Skeleton className="h-4 w-1/3 rounded" />
+										<Skeleton className="h-4 w-16 rounded" />
+									</div>
+									<div className="flex items-center justify-between">
+										<Skeleton className="h-4 w-1/4 rounded" />
+										<Skeleton className="h-4 w-16 rounded" />
+									</div>
+								</div>
+								<div className="border-t border-primary/20 pt-3 flex items-center justify-between mt-3">
+									<Skeleton className="h-5 w-12 rounded" />
+									<Skeleton className="h-6 w-20 rounded" />
+								</div>
+							</div>
 						))}
 					</div>
 				) : orders.length === 0 ? (

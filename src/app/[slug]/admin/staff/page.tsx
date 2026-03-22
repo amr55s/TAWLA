@@ -2,21 +2,21 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import {
-	CheckCheck,
-	Clipboard,
+	Copy,
+	ExternalLink,
 	Eye,
 	EyeOff,
-	Link as LinkIcon,
+	Monitor,
 	Pencil,
 	Plus,
 	Shield,
-	Sparkles,
+	Smartphone,
 	Trash2,
 	Users,
 	X,
-	ExternalLink,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { toast } from "sonner";
 import { useRestaurant } from "@/lib/contexts/RestaurantContext";
 import { createClient } from "@/lib/supabase/client";
@@ -32,6 +32,8 @@ interface StaffMember {
 }
 
 export default function AdminStaffPage() {
+	const params = useParams();
+	const slug = params?.slug as string;
 	const supabase = createClient();
 	const { restaurantId, loading: restLoading } = useRestaurant();
 	const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -41,7 +43,6 @@ export default function AdminStaffPage() {
 	const [saving, setSaving] = useState(false);
 	const [deletingId, setDeletingId] = useState<string | null>(null);
 	const [mounted, setMounted] = useState(false);
-	const [copied, setCopied] = useState(false);
 
 	useEffect(() => {
 		setMounted(true);
@@ -184,70 +185,10 @@ export default function AdminStaffPage() {
 
 	return (
 		<div className="space-y-6">
-			{/* Enhanced Staff Invite Banner */}
-			<motion.div
-				initial={{ opacity: 0, y: -20 }}
-				animate={{ opacity: 1, y: 0 }}
-				className="bg-[#0F4C75] rounded-3xl p-8 text-white shadow-2xl shadow-[#0F4C75]/20 overflow-hidden relative border border-white/10"
-			>
-				{/* Decorative Background Elements */}
-				<div className="absolute top-[-20%] right-[-5%] w-64 h-64 rounded-full bg-[#3282B8]/20 blur-[60px]" />
-				<div className="absolute bottom-[-10%] left-[50%] w-32 h-32 rounded-full bg-[#BBE1FA]/10 blur-[40px]" />
-
-				<div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-					<div className="space-y-2">
-						<div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-[#BBE1FA] text-[10px] font-bold uppercase tracking-widest">
-							<Sparkles size={12} />
-							Onboarding
-						</div>
-						<h2 className="text-2xl font-black tracking-tight">Invite Your Team</h2>
-						<p className="text-sm text-[#BBE1FA]/70 max-w-md font-medium leading-relaxed">
-							Share this link with your staff members. They'll need their registered Name and
-							4-digit PIN to access their respective dashboards.
-						</p>
-					</div>
-
-					<div className="flex flex-col sm:flex-row items-center gap-3 bg-black/20 backdrop-blur-xl border border-white/10 p-2 rounded-2xl w-full max-w-lg lg:w-auto">
-						<div className="w-full sm:w-auto px-4 py-3 bg-white/5 rounded-xl border border-white/5 flex items-center gap-3">
-							<LinkIcon size={14} className="text-[#BBE1FA] shrink-0" />
-							<code className="text-xs font-bold font-mono text-white/90 truncate block text-left w-full sm:max-w-[200px]">
-								{typeof window !== "undefined"
-									? `${window.location.origin}/${useRestaurant().slug}/login`
-									: `.../${useRestaurant().slug}/login`}
-							</code>
-						</div>
-						<div className="flex gap-2 w-full sm:w-auto">
-							<button
-								onClick={() => {
-									const url = `${window.location.origin}/${useRestaurant().slug}/login`;
-									navigator.clipboard.writeText(url);
-									setCopied(true);
-									toast.success("Staff login link copied!");
-									setTimeout(() => setCopied(false), 2000);
-								}}
-								className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white text-[#0F4C75] text-sm font-black hover:bg-[#BBE1FA] transition-all active:scale-95 shadow-xl shadow-black/10"
-							>
-								{copied ? <CheckCheck size={16} /> : <Clipboard size={16} />}
-								{copied ? "Copied" : "Copy"}
-							</button>
-							<a
-								href={`/${useRestaurant().slug}/login`}
-								target="_blank"
-								rel="noopener noreferrer"
-								className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#3282B8] text-white text-sm font-black hover:bg-[#BBE1FA] hover:text-[#0F4C75] transition-all active:scale-95 shadow-xl shadow-black/10"
-							>
-								<ExternalLink size={16} />
-								Open
-							</a>
-						</div>
-					</div>
-				</div>
-			</motion.div>
-
 			{/* Header */}
 			<div className="flex items-center justify-between">
 				<div>
-					<h1 className="text-xl font-bold text-[#0A1628] dark:text-white tracking-tight">
+					<h1 className="text-xl font-bold text-[#0A1628] tracking-tight">
 						Staff
 					</h1>
 					<p className="text-xs text-[#7B8BA3] mt-1">
@@ -263,29 +204,108 @@ export default function AdminStaffPage() {
 				</button>
 			</div>
 
+			{/* Quick Access Portals */}
+			<div className="bg-white rounded-2xl border border-[#E8ECF1] p-5 overflow-hidden shadow-sm">
+				<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+					
+					{/* Cashier Portal */}
+					<div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-slate-100/60 hover:border-blue-100 transition-colors group">
+						<div className="flex items-center gap-3.5">
+							<div className="w-10 h-10 rounded-xl bg-blue-100/50 text-blue-600 flex items-center justify-center">
+								<Monitor size={18} />
+							</div>
+							<div>
+								<p className="text-sm font-bold text-[#0A1628]">Cashier Portal</p>
+								<p className="text-[11px] font-medium text-[#7B8BA3]">Device login URL</p>
+							</div>
+						</div>
+						<div className="flex items-center gap-2">
+							<button
+								onClick={() => {
+									const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/${slug}/cashier`;
+									navigator.clipboard.writeText(url);
+									toast.success("Cashier URL copied to clipboard");
+								}}
+								className="p-2 rounded-lg text-[#94A3B8] hover:bg-white hover:text-[#0F4C75] hover:shadow-sm border border-transparent hover:border-gray-200 transition-all"
+								title="Copy Link"
+							>
+								<Copy size={16} />
+							</button>
+							<button
+								onClick={() => {
+									const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/${slug}/cashier`;
+									window.open(url, "_blank");
+								}}
+								className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#0F4C75] text-white hover:bg-[#0A3558] transition-colors shadow-sm"
+								title="Open Portal"
+							>
+								<ExternalLink size={14} />
+							</button>
+						</div>
+					</div>
+
+					{/* Waiter Portal */}
+					<div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-slate-100/60 hover:border-orange-100 transition-colors group">
+						<div className="flex items-center gap-3.5">
+							<div className="w-10 h-10 rounded-xl bg-orange-100/50 text-orange-600 flex items-center justify-center">
+								<Smartphone size={18} />
+							</div>
+							<div>
+								<p className="text-sm font-bold text-[#0A1628]">Waiter Portal</p>
+								<p className="text-[11px] font-medium text-[#7B8BA3]">Device login URL</p>
+							</div>
+						</div>
+						<div className="flex items-center gap-2">
+							<button
+								onClick={() => {
+									const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/${slug}/waiter`;
+									navigator.clipboard.writeText(url);
+									toast.success("Waiter URL copied to clipboard");
+								}}
+								className="p-2 rounded-lg text-[#94A3B8] hover:bg-white hover:text-[#0F4C75] hover:shadow-sm border border-transparent hover:border-gray-200 transition-all"
+								title="Copy Link"
+							>
+								<Copy size={16} />
+							</button>
+							<button
+								onClick={() => {
+									const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/${slug}/waiter`;
+									window.open(url, "_blank");
+								}}
+								className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#0F4C75] text-white hover:bg-[#0A3558] transition-colors shadow-sm"
+								title="Open Portal"
+							>
+								<ExternalLink size={14} />
+							</button>
+						</div>
+					</div>
+
+				</div>
+			</div>
+
 			{/* Stats */}
 			<div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-				<div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-5">
+				<div className="bg-white rounded-2xl border border-[#E8ECF1] p-5">
 					<p className="text-[10px] text-[#B0B8C4] uppercase tracking-wider font-semibold">
 						Total Staff
 					</p>
-					<p className="text-2xl font-bold text-[#0A1628] dark:text-white mt-1">
+					<p className="text-2xl font-bold text-[#0A1628] mt-1">
 						{staff.length}
 					</p>
 				</div>
-				<div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-5">
+				<div className="bg-white rounded-2xl border border-[#E8ECF1] p-5">
 					<p className="text-[10px] text-[#B0B8C4] uppercase tracking-wider font-semibold">
 						Waiters
 					</p>
-					<p className="text-2xl font-bold text-[#0A1628] dark:text-white mt-1">
+					<p className="text-2xl font-bold text-[#0A1628] mt-1">
 						{waiters.length}
 					</p>
 				</div>
-				<div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-5">
+				<div className="bg-white rounded-2xl border border-[#E8ECF1] p-5">
 					<p className="text-[10px] text-[#B0B8C4] uppercase tracking-wider font-semibold">
 						Cashiers
 					</p>
-					<p className="text-2xl font-bold text-[#0A1628] dark:text-white mt-1">
+					<p className="text-2xl font-bold text-[#0A1628] mt-1">
 						{cashiers.length}
 					</p>
 				</div>
@@ -293,7 +313,7 @@ export default function AdminStaffPage() {
 
 			{/* Staff Grid */}
 			{staff.length === 0 ? (
-				<div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-12 text-center">
+				<div className="bg-white rounded-2xl border border-[#E8ECF1] p-12 text-center">
 					<Users size={40} className="text-[#B0B8C4] mx-auto mb-3" />
 					<p className="text-sm text-[#7B8BA3]">
 						No staff members yet. Add your first team member.
@@ -307,7 +327,7 @@ export default function AdminStaffPage() {
 							layout
 							initial={{ opacity: 0, scale: 0.96 }}
 							animate={{ opacity: 1, scale: 1 }}
-							className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-5 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] transition-shadow"
+							className="bg-white rounded-2xl border border-[#E8ECF1] p-5 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] transition-shadow"
 						>
 							<div className="flex items-start justify-between mb-3">
 								<div className="flex items-center gap-3">
@@ -321,16 +341,15 @@ export default function AdminStaffPage() {
 										</span>
 									</div>
 									<div>
-										<p className="text-sm font-semibold text-[#0A1628] dark:text-white">
+										<p className="text-sm font-semibold text-[#0A1628]">
 											{s.name}
 										</p>
 										<div className="flex items-center gap-2 mt-0.5">
 											<span
-												className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-													s.role === "waiter"
+												className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.role === "waiter"
 														? "bg-blue-50 text-[#3282B8]"
 														: "bg-amber-50 text-amber-600"
-												}`}
+													}`}
 											>
 												{s.role.charAt(0).toUpperCase() + s.role.slice(1)}
 											</span>
@@ -397,7 +416,7 @@ export default function AdminStaffPage() {
 						>
 							<div className="p-6">
 								<div className="flex items-center justify-between mb-6">
-									<h3 className="text-lg font-bold text-[#0A1628] dark:text-white">
+									<h3 className="text-lg font-bold text-[#0A1628]">
 										{editingStaff ? "Edit Staff" : "Add Staff"}
 									</h3>
 									<button
@@ -438,11 +457,10 @@ export default function AdminStaffPage() {
 													key={r}
 													type="button"
 													onClick={() => setRole(r)}
-													className={`flex-1 py-2.5 rounded-xl text-xs font-semibold capitalize transition-all ${
-														role === r
+													className={`flex-1 py-2.5 rounded-xl text-xs font-semibold capitalize transition-all ${role === r
 															? "bg-[#0F4C75] text-white shadow-sm"
 															: "bg-[#F5F7FA] text-[#5A6B82] border border-[#E8ECF1] hover:border-[#3282B8]/40"
-													}`}
+														}`}
 												>
 													{r}
 												</button>

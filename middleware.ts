@@ -41,9 +41,15 @@ export async function middleware(request: NextRequest) {
           );
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, {
+              ...options,
+              secure: process.env.NODE_ENV === 'production',
+            })
           );
         },
+      },
+      cookieOptions: {
+        secure: process.env.NODE_ENV === 'production',
       },
     }
   );
@@ -85,6 +91,17 @@ export async function middleware(request: NextRequest) {
     const role = user.user_metadata?.role as string | undefined;
     const isCashierRoute = pathname.includes('/cashier');
     const isWaiterRoute = pathname.includes('/waiter');
+    const isAdmin = isAdminRoute(pathname);
+
+    // Block staff from accessing admin routes
+    if (isAdmin && (role === 'waiter' || role === 'cashier')) {
+      const segments = pathname.split('/').filter(Boolean);
+      const slug = segments.length > 0 ? segments[0] : '';
+      if (slug) {
+        return NextResponse.redirect(new URL(`/${slug}/${role}`, request.url));
+      }
+      return NextResponse.redirect(new URL('/', request.url));
+    }
 
     if ((isCashierRoute && role === 'waiter') || (isWaiterRoute && role === 'cashier')) {
       const segments = pathname.split('/').filter(Boolean);

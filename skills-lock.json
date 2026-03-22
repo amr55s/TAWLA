@@ -10,6 +10,11 @@
       "source": "smithery.ai",
       "sourceType": "well-known",
       "computedHash": "8a3dcf919f7e11596ca687ea2ae04662593bb61ab116d5dfe4a4729a89319aca"
+    },
+    "shadcn-ui": {
+      "source": "smithery.ai",
+      "sourceType": "well-known",
+      "computedHash": "68e6465e1eaa4e18b10b5441d86d35ff4011b5cd13696dccb39ea2cf608dab2f"
     }
   }
 }

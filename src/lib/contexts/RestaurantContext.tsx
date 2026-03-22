@@ -26,9 +26,11 @@ const RestaurantContext = createContext<RestaurantContextType>({
 export function RestaurantProvider({
 	children,
 	initialSlug,
+	requireAdmin = false,
 }: {
 	children: ReactNode;
 	initialSlug?: string;
+	requireAdmin?: boolean;
 }) {
 	const [restaurantId, setRestaurantId] = useState<string | null>(null);
 	const [slug, setSlug] = useState<string | null>(null);
@@ -70,6 +72,14 @@ export function RestaurantProvider({
 						throw new Error("Unauthorized for this restaurant");
 					}
 
+					if (requireAdmin) {
+						const role = user.user_metadata?.role;
+						if (role === 'waiter' || role === 'cashier') {
+							window.location.href = `/${data.slug}/${role}`;
+							return;
+						}
+					}
+
 					currentRestId = data.id;
 					currentSlug = data.slug;
 				} else {
@@ -88,6 +98,14 @@ export function RestaurantProvider({
 					if (data && data.length > 0) {
 						currentRestId = data[0].id;
 						currentSlug = data[0].slug;
+
+						if (requireAdmin) {
+							const role = user.user_metadata?.role;
+							if (role === 'waiter' || role === 'cashier') {
+								window.location.href = `/${currentSlug}/${role}`;
+								return;
+							}
+						}
 					} else {
 						throw new Error("No restaurant found for this user");
 					}

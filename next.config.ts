@@ -28,6 +28,8 @@ const nextConfig: NextConfig = {
     ];
   },
   skipTrailingSlashRedirect: true,
+  // @ts-ignore: Next.js 15+ undocumented property for dev cross-origin
+  allowedDevOrigins: ["10.148.34.251"],
 };
 
 export default nextConfig;

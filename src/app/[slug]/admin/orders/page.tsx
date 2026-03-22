@@ -126,7 +126,7 @@ export default function AdminOrdersPage() {
 			{/* Header */}
 			<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
 				<div>
-					<h1 className="text-xl font-bold text-[#0A1628] dark:text-white tracking-tight">
+					<h1 className="text-xl font-bold text-[#0A1628] tracking-tight">
 						Orders
 					</h1>
 					<p className="text-xs text-[#7B8BA3] mt-1" suppressHydrationWarning>
@@ -149,11 +149,10 @@ export default function AdminOrdersPage() {
 					<button
 						key={f}
 						onClick={() => setFilter(f)}
-						className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold capitalize whitespace-nowrap transition-all ${
-							filter === f
+						className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold capitalize whitespace-nowrap transition-all ${filter === f
 								? "bg-[#0F4C75] text-white shadow-sm"
 								: "bg-white border border-[#E8ECF1] text-[#5A6B82] hover:border-[#3282B8]/40"
-						}`}
+							}`}
 					>
 						{f}
 					</button>
@@ -166,13 +165,13 @@ export default function AdminOrdersPage() {
 					<div className="w-8 h-8 border-2 border-[#0F4C75] border-t-transparent rounded-full animate-spin" />
 				</div>
 			) : filteredOrders.length === 0 ? (
-				<div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 p-12 text-center">
+				<div className="bg-white rounded-2xl border border-[#E8ECF1] p-12 text-center">
 					<p className="text-sm text-[#7B8BA3]">
 						No orders found{filter !== "all" ? ` with status "${filter}"` : ""}.
 					</p>
 				</div>
 			) : (
-				<div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E8ECF1] dark:border-gray-700 overflow-hidden">
+				<div className="bg-white rounded-2xl border border-[#E8ECF1] overflow-hidden">
 					<div className="overflow-x-auto">
 						<table className="w-full">
 							<thead>
@@ -208,7 +207,7 @@ export default function AdminOrdersPage() {
 											animate={{ opacity: 1 }}
 											className="border-b border-[#F8FAFB] last:border-0 hover:bg-[#FAFBFC] transition-colors"
 										>
-											<td className="px-6 py-3.5 text-xs font-bold text-[#0A1628] dark:text-white">
+											<td className="px-6 py-3.5 text-xs font-bold text-[#0A1628]">
 												#{order.id.slice(0, 6)}
 											</td>
 											<td className="px-6 py-3.5 text-xs text-[#5A6B82] font-medium">
@@ -217,7 +216,7 @@ export default function AdminOrdersPage() {
 											<td className="px-6 py-3.5 text-xs text-[#5A6B82]">
 												{Array.isArray(order.items) ? order.items.length : 0}
 											</td>
-											<td className="px-6 py-3.5 text-xs font-semibold text-[#0A1628] dark:text-white">
+											<td className="px-6 py-3.5 text-xs font-semibold text-[#0A1628]">
 												{order.total_amount != null
 													? `${order.total_amount.toFixed(2)}`
 													: "—"}
@@ -235,9 +234,9 @@ export default function AdminOrdersPage() {
 											>
 												{mounted
 													? new Date(order.created_at).toLocaleTimeString(
-															"en-US",
-															{ hour: "2-digit", minute: "2-digit" },
-														)
+														"en-US",
+														{ hour: "2-digit", minute: "2-digit" },
+													)
 													: ""}
 											</td>
 										</motion.tr>

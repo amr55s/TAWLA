@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Lock, LogIn, Mail } from "lucide-react";
+import { AlertCircle, Lock, LogIn, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { useState } from "react";
@@ -15,14 +15,32 @@ export default function LoginPage() {
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [loading, setLoading] = useState(false);
+	const [emailError, setEmailError] = useState("");
+	const [passwordError, setPasswordError] = useState("");
+	const [authError, setAuthError] = useState("");
 
 	const handleLogin = async (e: React.FormEvent) => {
 		e.preventDefault();
+		setEmailError("");
+		setPasswordError("");
+		setAuthError("");
 
-		if (!email.trim() || !password) {
-			toast.error("Please enter both email and password");
-			return;
+		let hasError = false;
+
+		if (!email.trim()) {
+			setEmailError("Email is required");
+			hasError = true;
+		} else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+			setEmailError("Please enter a valid email address");
+			hasError = true;
 		}
+
+		if (!password) {
+			setPasswordError("Password is required");
+			hasError = true;
+		}
+
+		if (hasError) return;
 
 		setLoading(true);
 
@@ -32,13 +50,14 @@ export default function LoginPage() {
 		});
 
 		if (error) {
-			console.error("Login error:", error);
 			if (error.message?.toLowerCase().includes("email not confirmed")) {
-				toast.error(
+				setAuthError(
 					"Please check your email to confirm your account before logging in.",
 				);
+			} else if (error.message?.toLowerCase().includes("invalid login credentials")) {
+				setAuthError("Invalid email or password. Please try again.");
 			} else {
-				toast.error(error.message || "Invalid email or password");
+				setAuthError(error.message || "An error occurred during login.");
 			}
 			setLoading(false);
 			return;
@@ -130,6 +149,13 @@ export default function LoginPage() {
 						WebkitBackdropFilter: "blur(20px)",
 					}}
 				>
+					{authError && (
+						<div className="mb-4 bg-red-50 text-red-600 border border-red-200 p-3 rounded-md text-sm flex items-center gap-2">
+							<AlertCircle size={16} className="shrink-0" />
+							<p>{authError}</p>
+						</div>
+					)}
+
 					<form onSubmit={handleLogin} className="space-y-4">
 						{/* Email */}
 						<div>
@@ -145,11 +171,24 @@ export default function LoginPage() {
 									type="email"
 									autoComplete="email"
 									value={email}
-									onChange={(e) => setEmail(e.target.value)}
+									onChange={(e) => {
+										setEmail(e.target.value);
+										if (emailError) setEmailError("");
+									}}
+									disabled={loading}
 									placeholder="you@restaurant.com"
-									className="w-full py-3 ps-10 pe-3 bg-background border border-border-light rounded-xl text-sm text-text-body placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors"
+									className={`w-full py-3 ps-10 pe-3 bg-background border ${
+										emailError
+											? "border-red-500 focus:border-red-500"
+											: "border-border-light focus:border-primary"
+									} rounded-xl text-sm text-text-body placeholder:text-text-muted focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
 								/>
 							</div>
+							{emailError && (
+								<p className="mt-1.5 text-xs text-red-500 font-medium">
+									{emailError}
+								</p>
+							)}
 						</div>
 
 						{/* Password */}
@@ -166,19 +205,33 @@ export default function LoginPage() {
 									type="password"
 									autoComplete="current-password"
 									value={password}
-									onChange={(e) => setPassword(e.target.value)}
+									onChange={(e) => {
+										setPassword(e.target.value);
+										if (passwordError) setPasswordError("");
+										if (authError) setAuthError("");
+									}}
+									disabled={loading}
 									placeholder="Enter your password"
-									className="w-full py-3 ps-10 pe-3 bg-background border border-border-light rounded-xl text-sm text-text-body placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors"
+									className={`w-full py-3 ps-10 pe-3 bg-background border ${
+										passwordError
+											? "border-red-500 focus:border-red-500"
+											: "border-border-light focus:border-primary"
+									} rounded-xl text-sm text-text-body placeholder:text-text-muted focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
 								/>
 							</div>
+							{passwordError && (
+								<p className="mt-1.5 text-xs text-red-500 font-medium">
+									{passwordError}
+								</p>
+							)}
 						</div>
 
 						{/* Submit */}
 						<motion.button
 							type="submit"
-							whileTap={{ scale: 0.97 }}
+							whileTap={!loading ? { scale: 0.97 } : undefined}
 							disabled={loading}
-							className="w-full py-3 mt-2 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-2 transition-colors"
+							className="w-full py-3 mt-2 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-2 transition-colors disabled:cursor-not-allowed"
 						>
 							{loading ? (
 								<>

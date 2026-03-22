@@ -17,70 +17,127 @@ import {
 	Users,
 	UtensilsCrossed,
 	X,
-	Sun,
-	Moon,
-	KeyRound,
-	Mail,
-	CheckCircle2
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
 	RestaurantProvider,
 	useRestaurant,
 } from "@/lib/contexts/RestaurantContext";
 import { createClient } from "@/lib/supabase/client";
-import { useTheme } from "@/lib/contexts/ThemeContext";
 
 function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 	const pathname = usePathname();
 	const params = useParams();
-	const router = useRouter();
 	const urlSlug = params.slug as string;
 	const { slug: contextSlug, restaurantId } = useRestaurant();
 	const slug = urlSlug || contextSlug || "";
 	const basePath = `/${slug}/admin`;
 
-	const { theme, setTheme } = useTheme();
-
 	const [mobileOpen, setMobileOpen] = useState(false);
 	const [mounted, setMounted] = useState(false);
-	
-	// Notifications
 	const [notifCount, setNotifCount] = useState(0);
-	const [notifOpen, setNotifOpen] = useState(false);
-	const [notifications, setNotifications] = useState<{id: string, message: string, time: Date}[]>([]);
-	
-	// Profile & Settings
-	const [profileOpen, setProfileOpen] = useState(false);
-	const [settingsModalOpen, setSettingsModalOpen] = useState(false);
-	const [settingsView, setSettingsView] = useState<"email" | "password">("email");
-	const [emailInput, setEmailInput] = useState("");
-	const [passwordInput, setPasswordInput] = useState("");
-	const [savingAuth, setSavingAuth] = useState(false);
-
 	const [copied, setCopied] = useState(false);
+	const [notifOpen, setNotifOpen] = useState(false);
+	const [profileOpen, setProfileOpen] = useState(false);
+	const [recentNotifOrders, setRecentNotifOrders] = useState<any[]>([]);
+	const [notifLoading, setNotifLoading] = useState(false);
+	const [clearedAt, setClearedAt] = useState<Date | null>(null);
 
-	const notifRef = useRef<HTMLDivElement>(null);
-	const profileRef = useRef<HTMLDivElement>(null);
+	const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+	const [newPassword, setNewPassword] = useState("");
+	const [confirmPassword, setConfirmPassword] = useState("");
+	const [passwordError, setPasswordError] = useState("");
+	const [passwordLoading, setPasswordLoading] = useState(false);
+
+	const router = useRouter();
 
 	useEffect(() => setMounted(true), []);
 
-	// Click outside handlers
-	useEffect(() => {
-		function handleClickOutside(event: MouseEvent) {
-			if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
-				setNotifOpen(false);
-			}
-			if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
-				setProfileOpen(false);
-			}
+	const handlePasswordSubmit = async (e: React.FormEvent) => {
+		e.preventDefault();
+		setPasswordError("");
+		
+		if (newPassword.length < 6) {
+			setPasswordError("Password must be at least 6 characters long.");
+			return;
 		}
-		document.addEventListener("mousedown", handleClickOutside);
-		return () => document.removeEventListener("mousedown", handleClickOutside);
-	}, []);
+		if (newPassword !== confirmPassword) {
+			setPasswordError("Passwords do not match.");
+			return;
+		}
+
+		setPasswordLoading(true);
+		const supabase = createClient();
+		
+		const { error } = await supabase.auth.updateUser({
+			password: newPassword
+		});
+
+		setPasswordLoading(false);
+
+		if (error) {
+			setPasswordError(error.message || "Failed to update password.");
+			return;
+		}
+
+		setPasswordModalOpen(false);
+		setNewPassword("");
+		setConfirmPassword("");
+		toast.success("Password updated successfully!");
+	};
+
+	useEffect(() => {
+		if (!notifOpen || !restaurantId) return;
+		setNotifLoading(true);
+		const fetchNotifs = async () => {
+			const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+			const supabase = createClient();
+			const { data } = await supabase
+				.from("orders")
+				.select(`
+					id,
+					order_number,
+					created_at,
+					status,
+					total_amount,
+					tables ( table_number ),
+					order_items ( id )
+				`)
+				.eq("restaurant_id", restaurantId)
+				.gte("created_at", yesterday)
+				.in("status", ["pending", "confirmed"])
+				.order("created_at", { ascending: false })
+				.limit(5);
+			setRecentNotifOrders(data || []);
+			setNotifLoading(false);
+		};
+		fetchNotifs();
+	}, [notifOpen, restaurantId]);
+
+	const formatTimeAgo = (dateString: string) => {
+		const diff = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / 60000);
+		if (diff < 1) return "Just now";
+		if (diff < 60) return `${diff} mins ago`;
+		const hours = Math.floor(diff / 60);
+		if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+		const days = Math.floor(hours / 24);
+		return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+	};
+
+	const handleLogout = async () => {
+		const supabase = createClient();
+		await supabase.auth.signOut();
+		router.push("/login"); // or a generic login route
+	};
+
+	const handleClearNotifs = (e: React.MouseEvent) => {
+		e.stopPropagation();
+		setClearedAt(new Date());
+		setNotifCount(0);
+	};
 
 	// Realtime notification listener
 	useEffect(() => {
@@ -99,10 +156,6 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 				},
 				() => {
 					setNotifCount((c) => c + 1);
-					setNotifications((prev) => [
-						{ id: Math.random().toString(), message: "New Order Received!", time: new Date() },
-						...prev,
-					].slice(0, 10)); // keep last 10
 				},
 			)
 			.on(
@@ -115,10 +168,6 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 				},
 				() => {
 					setNotifCount((c) => c + 1);
-					setNotifications((prev) => [
-						{ id: Math.random().toString(), message: "New Waiter Call!", time: new Date() },
-						...prev,
-					].slice(0, 10));
 				},
 			)
 			.subscribe();
@@ -149,54 +198,14 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 		setTimeout(() => setCopied(false), 2000);
 	};
 
-	const handleUpdateAuth = async () => {
-		setSavingAuth(true);
-		const supabase = createClient();
-		
-		try {
-			if (settingsView === "email") {
-				if (!emailInput.includes("@")) {
-					toast.error("Please enter a valid email");
-					return;
-				}
-				const { error } = await supabase.auth.updateUser({ email: emailInput });
-				if (error) throw error;
-				toast.success("Confirmation link sent to both old and new emails.");
-			} else {
-				if (passwordInput.length < 6) {
-					toast.error("Password must be at least 6 characters");
-					return;
-				}
-				const { error } = await supabase.auth.updateUser({ password: passwordInput });
-				if (error) throw error;
-				toast.success("Password updated successfully.");
-			}
-			setSettingsModalOpen(false);
-			setEmailInput("");
-			setPasswordInput("");
-		} catch (err: any) {
-			console.error("Auth update error:", err);
-			toast.error(err.message || "Failed to update authentication settings");
-		} finally {
-			setSavingAuth(false);
-		}
-	};
-
-	const handleBellClick = () => {
-		setNotifOpen(!notifOpen);
-		if (!notifOpen && notifCount > 0) {
-			setNotifCount(0); // Mark as read when opening
-		}
-	};
-
 	return (
 		<div
-			className="h-screen overflow-hidden bg-[#F5F7FA] dark:bg-gray-900 transition-colors duration-200"
+			className="h-screen overflow-hidden bg-[#F5F7FA]"
 			suppressHydrationWarning
 		>
 			<div className="h-full flex">
 				{/* ── Sidebar (Desktop) ── */}
-				<aside className="hidden lg:flex fixed top-0 bottom-0 start-0 z-40 flex-col w-[260px] bg-white dark:bg-gray-800 border-r border-[#E8ECF1] dark:border-gray-700 shrink-0 overflow-y-auto transition-colors duration-200">
+				<aside className="hidden lg:flex fixed top-0 bottom-0 start-0 z-40 flex-col w-[260px] bg-white border-r border-[#E8ECF1] shrink-0 overflow-y-auto">
 					{/* Logo */}
 					<div className="px-7 pt-7 pb-6">
 						<Link href={basePath} className="flex items-center gap-2.5">
@@ -204,10 +213,10 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 								<span className="text-white text-sm font-bold">T</span>
 							</div>
 							<div>
-								<span className="text-lg font-bold text-[#0A1628] dark:text-white tracking-tight block leading-none">
+								<span className="text-lg font-bold text-[#0A1628] tracking-tight block leading-none">
 									Tawla
 								</span>
-								<span className="text-[10px] text-[#7B8BA3] dark:text-gray-400 font-medium tracking-wider uppercase">
+								<span className="text-[10px] text-[#7B8BA3] font-medium tracking-wider uppercase">
 									Dashboard
 								</span>
 							</div>
@@ -216,7 +225,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 
 					{/* Navigation */}
 					<nav className="flex-1 px-4 space-y-1">
-						<p className="px-3 mb-2 text-[10px] font-semibold text-[#B0B8C4] dark:text-gray-500 uppercase tracking-widest">
+						<p className="px-3 mb-2 text-[10px] font-semibold text-[#B0B8C4] uppercase tracking-widest">
 							Main Menu
 						</p>
 						{navItems.slice(0, 4).map((item) => {
@@ -226,11 +235,10 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 								<Link
 									key={item.href}
 									href={item.href}
-									className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 group ${
-										active
-											? "bg-[#0F4C75] text-white shadow-[0_2px_8px_rgba(15,76,117,0.2)]"
-											: "text-[#5A6B82] dark:text-gray-400 hover:bg-[#F0F4F8] dark:hover:bg-gray-700/50 hover:text-[#0A1628] dark:hover:text-white"
-									}`}
+									className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 group ${active
+										? "bg-[#0F4C75] text-white shadow-[0_2px_8px_rgba(15,76,117,0.2)]"
+										: "text-[#5A6B82] hover:bg-[#F0F4F8] hover:text-[#0A1628]"
+										}`}
 								>
 									<Icon size={18} strokeWidth={active ? 2 : 1.5} />
 									{item.label}
@@ -239,7 +247,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 						})}
 
 						<div className="pt-5 pb-1">
-							<p className="px-3 mb-2 text-[10px] font-semibold text-[#B0B8C4] dark:text-gray-500 uppercase tracking-widest">
+							<p className="px-3 mb-2 text-[10px] font-semibold text-[#B0B8C4] uppercase tracking-widest">
 								Management
 							</p>
 						</div>
@@ -250,11 +258,10 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 								<Link
 									key={item.href}
 									href={item.href}
-									className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 group ${
-										active
-											? "bg-[#0F4C75] text-white shadow-[0_2px_8px_rgba(15,76,117,0.2)]"
-											: "text-[#5A6B82] dark:text-gray-400 hover:bg-[#F0F4F8] dark:hover:bg-gray-700/50 hover:text-[#0A1628] dark:hover:text-white"
-									}`}
+									className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 group ${active
+										? "bg-[#0F4C75] text-white shadow-[0_2px_8px_rgba(15,76,117,0.2)]"
+										: "text-[#5A6B82] hover:bg-[#F0F4F8] hover:text-[#0A1628]"
+										}`}
 								>
 									<Icon size={18} strokeWidth={active ? 2 : 1.5} />
 									{item.label}
@@ -267,7 +274,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 					{slug && (
 						<div className="px-4 pb-3">
 							<div
-								className="rounded-2xl p-4 border border-[#BBE1FA]/30 dark:border-white/10"
+								className="rounded-2xl p-4 border border-[#BBE1FA]/30"
 								style={{
 									background:
 										"linear-gradient(135deg, rgba(15,76,117,0.06) 0%, rgba(50,130,184,0.08) 100%)",
@@ -280,13 +287,13 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 										Live Menu
 									</span>
 								</div>
-								<p className="text-[11px] text-[#5A6B82] dark:text-gray-300 font-medium truncate mb-3">
+								<p className="text-[11px] text-[#5A6B82] font-medium truncate mb-3">
 									tawla.app/{slug}
 								</p>
 								<div className="flex gap-2">
 									<button
 										onClick={handleCopyLink}
-										className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-white/80 dark:bg-gray-800 border border-[#E8ECF1] dark:border-gray-600 text-[10px] font-semibold text-[#5A6B82] dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 hover:text-[#0F4C75] transition-all"
+										className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-white/80 border border-[#E8ECF1] text-[10px] font-semibold text-[#5A6B82] hover:bg-white hover:text-[#0F4C75] transition-all"
 									>
 										<Copy size={11} />
 										{copied ? "Copied!" : "Copy Link"}
@@ -305,10 +312,10 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 					)}
 
 					{/* Bottom */}
-					<div className="p-4 border-t border-[#E8ECF1] dark:border-gray-700">
+					<div className="p-4 border-t border-[#E8ECF1]">
 						<Link
 							href="/"
-							className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium text-[#5A6B82] dark:text-gray-400 hover:bg-[#F0F4F8] dark:hover:bg-gray-700/50 hover:text-[#0A1628] dark:hover:text-white transition-all"
+							className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium text-[#5A6B82] hover:bg-[#F0F4F8] hover:text-[#0A1628] transition-all"
 						>
 							<LogOut size={18} strokeWidth={1.5} />
 							Back to Site
@@ -319,12 +326,12 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 				{/* ── Main Area ── */}
 				<div className="flex-1 flex flex-col h-full lg:ms-[260px] min-w-0">
 					{/* Top Header */}
-					<header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-[#E8ECF1] dark:border-gray-800 px-5 lg:px-8 py-3.5 transition-colors duration-200">
+					<header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-[#E8ECF1] px-5 lg:px-8 py-3.5">
 						<div className="flex items-center justify-between gap-4">
 							{/* Mobile menu toggle */}
 							<button
 								onClick={() => setMobileOpen(!mobileOpen)}
-								className="lg:hidden p-2 -ml-2 text-[#5A6B82] dark:text-gray-400 hover:text-[#0A1628] dark:hover:text-white transition-colors"
+								className="lg:hidden p-2 -ml-2 text-[#5A6B82] hover:text-[#0A1628] transition-colors"
 							>
 								{mobileOpen ? <X size={22} /> : <Menu size={22} />}
 							</button>
@@ -332,84 +339,117 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 							{/* Search */}
 							<div className="hidden sm:flex items-center flex-1 max-w-md">
 								<div className="relative w-full">
-									<Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B0B8C4] dark:text-gray-500" />
+									<Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B0B8C4]" />
 									<input
 										type="text"
 										placeholder="Search orders, menu items..."
-										className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#F5F7FA] dark:bg-gray-800 border border-transparent text-sm text-[#0A1628] dark:text-white
-                             placeholder:text-[#B0B8C4] dark:placeholder-gray-500 focus:outline-none focus:bg-white dark:focus:bg-gray-700 focus:border-[#E8ECF1] dark:focus:border-gray-600 focus:ring-1 focus:ring-[#3282B8]/20 transition-all"
+										className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#F5F7FA] border border-transparent text-sm text-[#0A1628]
+                             placeholder:text-[#B0B8C4] focus:outline-none focus:bg-white focus:border-[#E8ECF1] focus:ring-1 focus:ring-[#3282B8]/20 transition-all"
 									/>
 								</div>
 							</div>
 
 							{/* Right actions */}
-							<div className="flex items-center gap-2 sm:gap-3 ml-auto">
-								
-								{/* Dark Mode Toggle */}
-								{mounted && (
-									<button
-										onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-										className="p-2.5 rounded-xl hover:bg-[#F0F4F8] dark:hover:bg-gray-800 transition-colors text-[#5A6B82] dark:text-gray-400"
-										aria-label="Toggle Dark Mode"
-									>
-										{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-									</button>
-								)}
-
+							<div className="flex items-center gap-3 relative">
 								{/* Notification */}
-								<div className="relative" ref={notifRef}>
+								<div className="relative">
 									<button
-										onClick={handleBellClick}
-										className="relative p-2.5 rounded-xl hover:bg-[#F0F4F8] dark:hover:bg-gray-800 transition-colors"
+										onClick={() => {
+											setNotifOpen(!notifOpen);
+											setProfileOpen(false);
+											setNotifCount(0);
+										}}
+										className="relative p-2.5 rounded-xl hover:bg-[#F0F4F8] transition-colors"
 									>
-										<Bell size={18} className="text-[#5A6B82] dark:text-gray-400" />
+										<Bell size={18} className="text-[#5A6B82]" />
 										{notifCount > 0 && (
-											<span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-gray-900">
+											<span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white">
 												{notifCount > 9 ? "9+" : notifCount}
 											</span>
 										)}
 									</button>
+
 									<AnimatePresence>
 										{notifOpen && (
 											<motion.div
-												initial={{ opacity: 0, scale: 0.95, y: 10 }}
-												animate={{ opacity: 1, scale: 1, y: 0 }}
-												exit={{ opacity: 0, scale: 0.95, y: 10 }}
-												className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50"
+												initial={{ opacity: 0, y: 10, scale: 0.95 }}
+												animate={{ opacity: 1, y: 0, scale: 1 }}
+												exit={{ opacity: 0, y: 10, scale: 0.95 }}
+												transition={{ duration: 0.2 }}
+												className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-[#E8ECF1] overflow-hidden z-50"
 											>
-												<div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
-													<h3 className="font-bold text-gray-900 dark:text-white text-sm">Notifications</h3>
-													{notifications.length > 0 && (
-														<button 
-															onClick={() => setNotifications([])}
-															className="text-[10px] text-[#0F4C75] dark:text-[#3282B8] font-semibold hover:underline"
-														>
-															Clear all
-														</button>
-													)}
+												<div className="flex items-center justify-between p-4 border-b border-[#E8ECF1]">
+													<h3 className="text-sm font-bold text-[#0A1628]">Notifications</h3>
+													<button
+														onClick={handleClearNotifs}
+														className="text-xs font-semibold text-[#94A3B8] hover:text-[#0F4C75] transition-colors"
+													>
+														Clear All
+													</button>
 												</div>
-												<div className="max-h-80 overflow-y-auto">
-													{notifications.length === 0 ? (
-														<div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">
-															No recent activity.
+												<div className="max-h-[300px] overflow-y-auto">
+													{notifLoading ? (
+														<div className="p-8 flex justify-center">
+															<div className="w-5 h-5 border-2 border-[#0F4C75] border-t-transparent rounded-full animate-spin" />
 														</div>
-													) : (
-														<div className="divide-y divide-gray-50 dark:divide-gray-700">
-															{notifications.map((n) => (
-																<div key={n.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors flex gap-3 items-start">
-																	<div className="w-8 h-8 rounded-full bg-[#0F4C75]/10 dark:bg-[#3282B8]/20 flex items-center justify-center shrink-0">
-																		<CheckCircle2 size={14} className="text-[#0F4C75] dark:text-[#3282B8]" />
+													) : (() => {
+														const visibleNotifs = recentNotifOrders.filter(
+															(o) => !clearedAt || new Date(o.created_at) > clearedAt
+														);
+														
+														if (visibleNotifs.length === 0) {
+															return (
+																<div className="px-6 py-10 flex flex-col items-center justify-center text-center">
+																	<div className="w-10 h-10 rounded-full bg-[#F5F7FA] flex items-center justify-center mb-3">
+																		<Bell size={18} className="text-[#B0B8C4]" />
 																	</div>
-																	<div>
-																		<p className="text-sm font-semibold text-gray-900 dark:text-white">{n.message}</p>
-																		<p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
-																			{n.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-																		</p>
-																	</div>
+																	<p className="text-sm font-semibold text-[#0A1628] mb-0.5">All caught up!</p>
+																	<p className="text-xs text-[#94A3B8]">No new notifications to show.</p>
 																</div>
-															))}
-														</div>
-													)}
+															);
+														}
+
+														return (
+															<div className="flex flex-col">
+																{visibleNotifs.map((order) => {
+																const tableNum = order.tables?.table_number;
+																const itemCount = order.order_items?.length || 0;
+																const amount = Number(order.total_amount || 0).toFixed(2);
+																const statusText = order.status.replace(/_/g, " ");
+
+																return (
+																	<Link
+																		key={order.id}
+																		href={`/${slug}/admin/orders`}
+																		onClick={() => setNotifOpen(false)}
+																		className="flex items-start gap-3 px-4 py-3 hover:bg-[#F0F4F8] border-b border-[#E8ECF1] last:border-0 transition-colors group"
+																	>
+																		<div className="mt-1.5 w-2 h-2 rounded-full shrink-0 bg-[#0F4C75] shadow-[0_0_8px_rgba(15,76,117,0.4)]" />
+																		
+																		<div className="flex-1 min-w-0">
+																			<div className="flex items-center justify-between gap-2 mb-0.5">
+																				<span className="text-sm font-bold text-[#0A1628] truncate group-hover:text-[#0F4C75] transition-colors">
+																					Order #{order.order_number || order.id.slice(0, 4)} • {tableNum ? `Table ${tableNum}` : "Takeaway"}
+																				</span>
+																				<span className="text-[10px] font-medium text-[#94A3B8] shrink-0 whitespace-nowrap">
+																					{formatTimeAgo(order.created_at)}
+																				</span>
+																			</div>
+																			
+																			<div className="flex items-center gap-1.5 text-xs text-[#7B8BA3] truncate">
+																				<span className="font-semibold text-[#0F4C75]">${amount}</span>
+																				<span>•</span>
+																				<span>{itemCount} {itemCount === 1 ? 'item' : 'items'}</span>
+																				<span>•</span>
+																				<span className="capitalize truncate">{statusText}</span>
+																			</div>
+																		</div>
+																	</Link>
+																);
+															})}
+															</div>
+														);
+													})()}
 												</div>
 											</motion.div>
 										)}
@@ -417,66 +457,58 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 								</div>
 
 								{/* Profile */}
-								<div className="relative" ref={profileRef}>
+								<div className="relative">
 									<div
 										role="button"
-										onClick={() => setProfileOpen(!profileOpen)}
-										className="flex items-center gap-2.5 p-1.5 pe-3 rounded-xl hover:bg-[#F0F4F8] dark:hover:bg-gray-800 transition-colors cursor-pointer"
+										onClick={() => {
+											setProfileOpen(!profileOpen);
+											setNotifOpen(false);
+										}}
+										className="flex items-center gap-2.5 p-1.5 pe-3 rounded-xl hover:bg-[#F0F4F8] transition-colors cursor-pointer"
 									>
 										<div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#0F4C75] to-[#3282B8] flex items-center justify-center">
 											<span className="text-white text-xs font-bold">A</span>
 										</div>
 										<div className="hidden md:block text-start">
-											<span className="block text-xs font-semibold text-[#0A1628] dark:text-white leading-none">
+											<span className="block text-xs font-semibold text-[#0A1628] leading-none">
 												Admin
 											</span>
-											<span className="block text-[10px] text-[#7B8BA3] dark:text-gray-400">
-												Settings
+											<span className="block text-[10px] text-[#7B8BA3]">
+												Owner
 											</span>
 										</div>
 										<ChevronDown
 											size={14}
-											className="text-[#B0B8C4] dark:text-gray-500 hidden md:block"
+											className={`text-[#B0B8C4] hidden md:block transition-transform duration-200 ${profileOpen ? "rotate-180" : ""}`}
 										/>
 									</div>
+
 									<AnimatePresence>
 										{profileOpen && (
 											<motion.div
-												initial={{ opacity: 0, scale: 0.95, y: 10 }}
-												animate={{ opacity: 1, scale: 1, y: 0 }}
-												exit={{ opacity: 0, scale: 0.95, y: 10 }}
-												className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50 p-2"
+												initial={{ opacity: 0, y: 10, scale: 0.95 }}
+												animate={{ opacity: 1, y: 0, scale: 1 }}
+												exit={{ opacity: 0, y: 10, scale: 0.95 }}
+												transition={{ duration: 0.2 }}
+												className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-[#E8ECF1] overflow-hidden z-50 p-1.5"
 											>
-												<ul className="space-y-1">
-													<li>
-														<button 
-															onClick={() => { setSettingsView("email"); setSettingsModalOpen(true); setProfileOpen(false); }}
-															className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl transition-colors"
-														>
-															<Mail size={16} className="text-gray-400" />
-															Change Email
-														</button>
-													</li>
-													<li>
-														<button 
-															onClick={() => { setSettingsView("password"); setSettingsModalOpen(true); setProfileOpen(false); }}
-															className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl transition-colors"
-														>
-															<KeyRound size={16} className="text-gray-400" />
-															Change Password
-														</button>
-													</li>
-													<div className="h-px bg-gray-100 dark:bg-gray-700 my-1 mx-2" />
-													<li>
-														<Link 
-															href="/"
-															className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors"
-														>
-															<LogOut size={16} />
-															Logout
-														</Link>
-													</li>
-												</ul>
+												<button
+													onClick={() => {
+														setProfileOpen(false);
+														setPasswordModalOpen(true);
+													}}
+													className="w-full text-left px-3 py-2 text-sm font-medium text-[#0A1628] hover:bg-[#F0F4F8] rounded-xl transition-colors"
+												>
+													Change Password
+												</button>
+												<div className="h-px bg-[#E8ECF1] my-1.5 mx-2" />
+												<button
+													onClick={handleLogout}
+													className="w-full flex items-center gap-2 px-3 py-2 text-sm font-bold text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+												>
+													<LogOut size={16} />
+													Log Out
+												</button>
 											</motion.div>
 										)}
 									</AnimatePresence>
@@ -484,67 +516,6 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 							</div>
 						</div>
 					</header>
-
-					{/* Settings Modal */}
-					<AnimatePresence>
-						{settingsModalOpen && (
-							<>
-								<motion.div
-									initial={{ opacity: 0 }}
-									animate={{ opacity: 1 }}
-									exit={{ opacity: 0 }}
-									onClick={() => setSettingsModalOpen(false)}
-									className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50"
-								/>
-								<motion.div
-									initial={{ opacity: 0, scale: 0.95, y: 20 }}
-									animate={{ opacity: 1, scale: 1, y: 0 }}
-									exit={{ opacity: 0, scale: 0.95, y: 20 }}
-									className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-gray-800 rounded-3xl p-8 shadow-2xl z-50 border border-gray-100 dark:border-gray-700"
-								>
-									<div className="flex justify-between items-center mb-6">
-										<h2 className="text-xl font-bold text-gray-900 dark:text-white">
-											{settingsView === "email" ? "Change Email" : "Change Password"}
-										</h2>
-										<button onClick={() => setSettingsModalOpen(false)} className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
-											<X size={20} />
-										</button>
-									</div>
-									<div className="space-y-4">
-										<div>
-											<label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">
-												{settingsView === "email" ? "New Email Address" : "New Password"}
-											</label>
-											{settingsView === "email" ? (
-												<input
-													type="email"
-													value={emailInput}
-													onChange={e => setEmailInput(e.target.value)}
-													placeholder="admin@example.com"
-													className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-[#0F4C75] focus:border-transparent outline-none transition-all"
-												/>
-											) : (
-												<input
-													type="password"
-													value={passwordInput}
-													onChange={e => setPasswordInput(e.target.value)}
-													placeholder="Min. 6 characters"
-													className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-[#0F4C75] focus:border-transparent outline-none transition-all"
-												/>
-											)}
-										</div>
-										<button
-											onClick={handleUpdateAuth}
-											disabled={savingAuth || (settingsView === "email" ? !emailInput : passwordInput.length < 6)}
-											className="w-full py-3.5 mt-2 bg-[#0F4C75] text-white rounded-xl font-bold hover:bg-[#0A3558] disabled:opacity-50 transition-colors shadow-lg shadow-[#0F4C75]/20"
-										>
-											{savingAuth ? "Saving..." : "Update Credentials"}
-										</button>
-									</div>
-								</motion.div>
-							</>
-						)}
-					</AnimatePresence>
 
 					{/* Mobile Drawer — only render after mount to avoid hydration issues */}
 					<AnimatePresence>
@@ -565,15 +536,15 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 									animate={{ x: 0 }}
 									exit={{ x: -280 }}
 									transition={{ type: "spring", damping: 28, stiffness: 300 }}
-									className="relative w-[280px] bg-white dark:bg-gray-800 h-full shadow-2xl p-5 overflow-y-auto"
+									className="relative w-[280px] bg-white h-full shadow-2xl p-5 overflow-y-auto"
 								>
 									<div className="flex items-center justify-between mb-6">
-										<span className="text-lg font-bold text-[#0A1628] dark:text-white">
+										<span className="text-lg font-bold text-[#0A1628]">
 											Tawla
 										</span>
 										<button
 											onClick={() => setMobileOpen(false)}
-											className="p-1.5 text-[#5A6B82] dark:text-gray-400"
+											className="p-1.5 text-[#5A6B82]"
 										>
 											<X size={20} />
 										</button>
@@ -587,11 +558,10 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 													key={item.href}
 													href={item.href}
 													onClick={() => setMobileOpen(false)}
-													className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all ${
-														active
-															? "bg-[#0F4C75] text-white"
-															: "text-[#5A6B82] dark:text-gray-400 hover:bg-[#F0F4F8] dark:hover:bg-gray-700"
-													}`}
+													className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all ${active
+														? "bg-[#0F4C75] text-white"
+														: "text-[#5A6B82] hover:bg-[#F0F4F8]"
+														}`}
 												>
 													<Icon size={18} /> {item.label}
 												</Link>
@@ -604,7 +574,102 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 					</AnimatePresence>
 
 					{/* Main Content */}
-					<main className="flex-1 overflow-y-auto p-5 lg:p-8 relative z-0">{children}</main>
+					<main className="flex-1 overflow-y-auto p-5 lg:p-8">{children}</main>
+
+					{/* Change Password Modal */}
+					<AnimatePresence>
+						{passwordModalOpen && (
+							<motion.div
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								exit={{ opacity: 0 }}
+								className="fixed inset-0 z-[100] flex items-center justify-center px-4"
+							>
+								{/* Backdrop */}
+								<div 
+									className="absolute inset-0 bg-black/20 backdrop-blur-sm"
+									onClick={() => !passwordLoading && setPasswordModalOpen(false)}
+								/>
+								
+								{/* Modal Panel */}
+								<motion.div
+									initial={{ opacity: 0, y: 20, scale: 0.95 }}
+									animate={{ opacity: 1, y: 0, scale: 1 }}
+									exit={{ opacity: 0, y: 20, scale: 0.95 }}
+									className="relative bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-[#E8ECF1] p-6 max-w-md w-full"
+								>
+									<div className="flex items-center justify-between mb-5">
+										<h2 className="text-lg font-bold text-[#0A1628]">Change Password</h2>
+										<button
+											onClick={() => !passwordLoading && setPasswordModalOpen(false)}
+											className="p-1 text-[#7B8BA3] hover:text-[#0A1628] transition-colors rounded-lg hover:bg-[#F5F7FA]"
+										>
+											<X size={18} />
+										</button>
+									</div>
+
+									<form onSubmit={handlePasswordSubmit} className="space-y-4">
+										<div>
+											<label className="text-xs font-semibold text-[#5A6B82] mb-1.5 block">
+												New Password
+											</label>
+											<input
+												type="password"
+												value={newPassword}
+												onChange={(e) => {
+													setNewPassword(e.target.value);
+													if (passwordError) setPasswordError("");
+												}}
+												disabled={passwordLoading}
+												placeholder="••••••••"
+												className="w-full py-2.5 px-3 bg-[#F5F7FA] border border-transparent rounded-xl text-sm text-[#0A1628] placeholder:text-[#B0B8C4] focus:outline-none focus:bg-white focus:border-[#E8ECF1] focus:ring-1 focus:ring-[#3282B8]/20 transition-all"
+											/>
+										</div>
+
+										<div>
+											<label className="text-xs font-semibold text-[#5A6B82] mb-1.5 block">
+												Confirm New Password
+											</label>
+											<input
+												type="password"
+												value={confirmPassword}
+												onChange={(e) => {
+													setConfirmPassword(e.target.value);
+													if (passwordError) setPasswordError("");
+												}}
+												disabled={passwordLoading}
+												placeholder="••••••••"
+												className="w-full py-2.5 px-3 bg-[#F5F7FA] border border-transparent rounded-xl text-sm text-[#0A1628] placeholder:text-[#B0B8C4] focus:outline-none focus:bg-white focus:border-[#E8ECF1] focus:ring-1 focus:ring-[#3282B8]/20 transition-all"
+											/>
+										</div>
+
+										{passwordError && (
+											<p className="text-xs font-medium text-red-500 mt-1">
+												{passwordError}
+											</p>
+										)}
+
+										<div className="pt-2">
+											<button
+												type="submit"
+												disabled={passwordLoading}
+												className="w-full py-2.5 bg-[#0F4C75] text-white rounded-xl text-sm font-semibold hover:bg-[#0A3558] disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+											>
+												{passwordLoading ? (
+													<span className="flex items-center justify-center gap-2">
+														<div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+														Updating...
+													</span>
+												) : (
+													"Update Password"
+												)}
+											</button>
+										</div>
+									</form>
+								</motion.div>
+							</motion.div>
+						)}
+					</AnimatePresence>
 				</div>
 			</div>
 		</div>
@@ -619,7 +684,7 @@ export default function AdminLayout({
 	const params = useParams();
 	const slug = params.slug as string;
 	return (
-		<RestaurantProvider initialSlug={slug}>
+		<RestaurantProvider initialSlug={slug} requireAdmin>
 			<AdminLayoutInner>{children}</AdminLayoutInner>
 		</RestaurantProvider>
 	);
