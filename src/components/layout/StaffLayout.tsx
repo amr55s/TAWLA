@@ -114,11 +114,9 @@ export function StaffLayout({
 					<div className="flex items-center gap-4">
 						{/* Mobile Menu */}
 						<Sheet>
-							<SheetTrigger asChild>
-								<Button variant="ghost" size="icon" className="lg:hidden w-10 h-10 rounded-full">
-									<Menu className="w-5 h-5" />
-									<span className="sr-only">Toggle Sidebar</span>
-								</Button>
+							<SheetTrigger className="lg:hidden flex items-center justify-center w-10 h-10 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+								<Menu className="w-5 h-5" />
+								<span className="sr-only">Toggle Sidebar</span>
 							</SheetTrigger>
 							<SheetContent side="left" className="w-[280px] p-0 flex flex-col bg-card/95 backdrop-blur-xl border-border">
 								<SheetTitle className="sr-only">Navigation Menu</SheetTitle>
@@ -138,15 +136,13 @@ export function StaffLayout({
 
 						{/* User Dropdown */}
 						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="ghost" className="relative h-10 w-10 rounded-full outline-none ring-ring focus-visible:ring-2">
-									<Avatar className="h-10 w-10 border border-border">
-										<AvatarImage src={userAvatar} alt={userName} />
-										<AvatarFallback className="bg-primary/10 text-primary font-semibold">
-											{userInitials}
-										</AvatarFallback>
-									</Avatar>
-								</Button>
+							<DropdownMenuTrigger className="relative h-10 w-10 rounded-full outline-none ring-ring focus-visible:ring-2 hover:bg-accent transition-colors">
+								<Avatar className="h-10 w-10 border border-border">
+									<AvatarImage src={userAvatar} alt={userName} />
+									<AvatarFallback className="bg-primary/10 text-primary font-semibold">
+										{userInitials}
+									</AvatarFallback>
+								</Avatar>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent className="w-56 rounded-xl" align="end">
 								<DropdownMenuLabel className="font-normal">
