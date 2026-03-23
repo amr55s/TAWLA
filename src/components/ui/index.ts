@@ -9,4 +9,4 @@ export { ItemDetailSheet } from "./ItemDetailSheet";
 export { MenuItemImage } from "./MenuItemImage";
 export { NumericKeypad } from "./NumericKeypad";
 export { PageHeader } from "./PageHeader";
-export { Skeleton } from "./Skeleton";
+export { Skeleton } from "./skeleton";

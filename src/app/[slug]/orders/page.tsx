@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { useCallback, useEffect, useState } from "react";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { FloatingNavBar } from "@/components/ui/FloatingNavBar";
 import { createClient } from "@/lib/supabase/client";
 import { useCartStore } from "@/store/cart";
