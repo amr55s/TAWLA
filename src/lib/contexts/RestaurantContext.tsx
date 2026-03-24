@@ -56,6 +56,7 @@ export function RestaurantProvider({
 		let mounted = true;
 		const supabase = createClient();
 		const fetchRestaurant = async () => {
+			let currentSlug: string | null = initialSlug || null;
 			try {
 				const {
 					data: { user },
@@ -68,7 +69,6 @@ export function RestaurantProvider({
 				let currentRestId = user.user_metadata?.restaurant_id as
 					| string
 					| undefined;
-				let currentSlug: string | null = null;
 
 				if (initialSlug) {
 					const { data, error: dbError } = await supabase
@@ -149,7 +149,7 @@ export function RestaurantProvider({
 						setSlug(null);
 					}
 					if (requireAdmin) {
-						router.push("/login");
+						router.push("/" + (initialSlug || currentSlug) + "/login");
 					}
 				} else {
 					console.error("Restaurant fetch error:", msg || err);
@@ -170,7 +170,7 @@ export function RestaurantProvider({
 					setRestaurantId(null);
 					setSlug(null);
 				}
-				router.push("/login");
+				router.push("/" + (initialSlug || slug) + "/login");
 			} else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
 				if (mounted) {
 					fetchRestaurant();

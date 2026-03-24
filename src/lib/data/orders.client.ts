@@ -272,7 +272,7 @@ export async function getTableByNumberClient(
 		.select("id, restaurant_id, table_number, qr_code_url")
 		.eq("restaurant_id", restaurantId)
 		.eq("table_number", tableNumber)
-		.single();
+		.maybeSingle();
 
 	if (error) {
 		console.error(

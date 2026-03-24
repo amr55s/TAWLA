@@ -135,7 +135,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 	const handleLogout = async () => {
 		const supabase = createClient();
 		await supabase.auth.signOut();
-		router.push("/login"); // or a generic login route
+		router.push("/" + slug + "/login");
 	};
 
 	const handleClearNotifs = (e: React.MouseEvent) => {

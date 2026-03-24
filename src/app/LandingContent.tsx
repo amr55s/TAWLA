@@ -548,6 +548,7 @@ function HeroSection() {
 							height={1080}
 							className="w-full h-auto object-cover"
 							priority
+							unoptimized={true}
 						/>
 					</div>
 					{/* Glow under the card */}
@@ -700,6 +701,7 @@ function JourneySection() {
 										priority
 										sizes="(max-width: 640px) 100vw, 320px"
 										className="object-cover object-top"
+										unoptimized={true}
 									/>
 								</div>
 							) : (
@@ -712,6 +714,7 @@ function JourneySection() {
 										priority
 										sizes="(max-width: 1024px) 100vw, 500px"
 										className="object-cover object-top"
+										unoptimized={true}
 									/>
 								</div>
 							)}

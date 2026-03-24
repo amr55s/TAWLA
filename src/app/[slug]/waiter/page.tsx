@@ -87,7 +87,8 @@ export default function WaiterDashboardPage({
 	const [selectedTable, setSelectedTable] = useState<TableWithStatus | null>(
 		null,
 	);
-	const [tableOrder, setTableOrder] = useState<OrderWithItems | null>(null);
+	// Multiple orders (tickets) per table for multi-round ordering sessions
+	const [tableOrders, setTableOrders] = useState<OrderWithItems[]>([]);
 	const [isLoadingOrder, setIsLoadingOrder] = useState(false);
 	const [isConfirming, setIsConfirming] = useState(false);
 	const [isClearing, setIsClearing] = useState(false);
@@ -108,7 +109,7 @@ export default function WaiterDashboardPage({
 				`tawla_staff_${restaurantData.id}_waiter`,
 			);
 			if (!staffId) {
-				router.push(`/${slug}/waiter/login`);
+				router.push(`/${slug}/login`);
 				return;
 			}
 
@@ -259,103 +260,52 @@ export default function WaiterDashboardPage({
 	const handleTableClick = async (table: TableWithStatus) => {
 		const clickedTableNum = String(table.table_number);
 
-		if (table.status === "calling") {
-			setSelectedTable(table);
-			setTableOrder(null);
-			setIsLoadingOrder(true);
+		setSelectedTable(table);
+		setTableOrders([]);
 
-			try {
-				const tableUuid = Object.keys(tableMap).find(
-					(key) => String(tableMap[key]) === clickedTableNum,
-				);
-				if (tableUuid) {
-					const { data: orderData } = await supabase
-						.from("orders")
-						.select(`*, items:order_items(*, menu_item:menu_items(*))`)
-						.eq("table_id", tableUuid)
-						.in("status", [
-							"pending",
-							...WAITER_ACTIVE_ORDER_STATUSES,
-						] as string[])
-						.order("created_at", { ascending: false })
-						.limit(1)
-						.maybeSingle();
-					setTableOrder(orderData as unknown as OrderWithItems);
-				}
-			} catch (e) {
-				console.error("Failed to fetch order for calling table:", e);
-			} finally {
-				setIsLoadingOrder(false);
-			}
-		} else if (table.status === "pending" || table.status === "active") {
-			const statusFilter =
-				table.status === "pending"
-					? ["pending"]
-					: ([...WAITER_ACTIVE_ORDER_STATUSES] as string[]);
+		if (table.status === "empty") return;
 
-			const matchingOrders = activeOrders.filter(
-				(o: any) =>
-					String(getOrderTableNum(o)) === clickedTableNum &&
-					statusFilter.includes(o.status),
+		setIsLoadingOrder(true);
+
+		try {
+			const tableUuid = Object.keys(tableMap).find(
+				(key) => String(tableMap[key]) === clickedTableNum,
 			);
 
-			setSelectedTable(table);
-			setIsLoadingOrder(true);
-
-			try {
-				const targetId =
-					matchingOrders.length > 0 ? matchingOrders[0].id : null;
-
-				if (targetId) {
-					const { data: orderData, error } = await supabase
-						.from("orders")
-						.select(`*, items:order_items(*, menu_item:menu_items(*))`)
-						.eq("id", targetId)
-						.maybeSingle();
-
-					if (error) throw error;
-					setTableOrder(orderData as unknown as OrderWithItems);
-				} else {
-					const tableUuid = Object.keys(tableMap).find(
-						(key) => String(tableMap[key]) === clickedTableNum,
-					);
-					if (tableUuid) {
-						const { data: orderData, error } = await supabase
-							.from("orders")
-							.select(`*, items:order_items(*, menu_item:menu_items(*))`)
-							.eq("table_id", tableUuid)
-							.in("status", statusFilter)
-							.order("created_at", { ascending: false })
-							.limit(1)
-							.maybeSingle();
-
-						if (error) throw error;
-						setTableOrder(orderData as unknown as OrderWithItems);
-					} else {
-						setTableOrder(null);
-					}
-				}
-			} catch (e) {
-				console.error("Failed to fetch table specific order:", e);
-			} finally {
+			if (!tableUuid) {
 				setIsLoadingOrder(false);
+				return;
 			}
+
+			const allActiveStatuses = ["pending", ...WAITER_ACTIVE_ORDER_STATUSES] as string[];
+
+			// Fetch ALL active orders for this table to support multi-round ordering
+			const { data: ordersData, error } = await supabase
+				.from("orders")
+				.select(`*, items:order_items(*, menu_item:menu_items(*))`)
+				.eq("table_id", tableUuid)
+				.in("status", allActiveStatuses)
+				.order("created_at", { ascending: true });
+
+			if (error) throw error;
+			setTableOrders((ordersData as unknown as OrderWithItems[]) || []);
+		} catch (e) {
+			console.error("Failed to fetch table orders:", e);
+		} finally {
+			setIsLoadingOrder(false);
 		}
 	};
 
 	const handleConfirmOrder = async () => {
-		if (!tableOrder || !selectedTable || !restaurant?.id) return;
+		if (!selectedTable || !restaurant?.id) return;
 		setIsConfirming(true);
 
-		const clickedTableNum = String(selectedTable.table_number);
-		const pendingForTable = activeOrders.filter(
-			(o: any) =>
-				String(getOrderTableNum(o)) === clickedTableNum &&
-				o.status === "pending",
-		);
-		const activeOrderIds = pendingForTable.map((o: any) => o.id);
+		// Confirm ALL pending orders for the table at once
+		const pendingOrderIds = tableOrders
+			.filter((o) => o.status === "pending")
+			.map((o) => o.id);
 
-		if (!activeOrderIds || activeOrderIds.length === 0) {
+		if (pendingOrderIds.length === 0) {
 			toast.error("No pending orders to confirm for this table");
 			setIsConfirming(false);
 			return;
@@ -365,19 +315,19 @@ export default function WaiterDashboardPage({
 			const { error } = await supabase
 				.from("orders")
 				.update({ status: "confirmed" })
-				.in("id", activeOrderIds)
+				.in("id", pendingOrderIds)
 				.eq("restaurant_id", restaurant.id);
 
 			if (error) throw error;
 
 			posthog.capture("waiter_order_confirmed", {
 				table_number: selectedTable?.table_number,
-				order_ids: activeOrderIds,
+				order_ids: pendingOrderIds,
 				restaurant_slug: slug,
 			});
-			toast.success("Order sent to kitchen");
+			toast.success(`${pendingOrderIds.length > 1 ? `${pendingOrderIds.length} orders` : "Order"} sent to kitchen`);
 			setSelectedTable(null);
-			setTableOrder(null);
+			setTableOrders([]);
 		} catch (e) {
 			console.error("Confirm failed", e);
 			toast.error("Failed to confirm order");
@@ -396,7 +346,7 @@ export default function WaiterDashboardPage({
 
 		const clickedTableNum = String(selectedTable.table_number);
 		setSelectedTable(null);
-		setTableOrder(null);
+		setTableOrders([]);
 		setIsClearing(true);
 
 		try {
@@ -457,7 +407,7 @@ export default function WaiterDashboardPage({
 			});
 			toast.success(`Resolved call for Table ${selectedTable.table_number}`);
 			setSelectedTable(null);
-			setTableOrder(null);
+			setTableOrders([]);
 		} catch (e) {
 			console.error("Failed to resolve call:", e);
 			toast.error("Failed to resolve call");
@@ -755,8 +705,17 @@ export default function WaiterDashboardPage({
 
 						{/* Drawer Body */}
 						<div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-							{/* Call Alert Banner */}
-							{selectedTable.status === "calling" && (
+							{selectedTable.status === "empty" ? (
+								<div className="flex flex-col items-center justify-center py-10 space-y-4">
+									<div className="w-20 h-20 bg-[#F1F5F9] rounded-full flex items-center justify-center text-[#94A3B8]">
+										<UtensilsCrossed size={40} />
+									</div>
+									<div className="text-center">
+										<p className="text-lg font-bold text-[#0A1628]">Currently Empty</p>
+										<p className="text-sm text-[#64748B]">No active session for this table</p>
+									</div>
+								</div>
+							) : selectedTable.status === "calling" && (
 								<motion.div
 									initial={{ opacity: 0, y: -8 }}
 									animate={{ opacity: 1, y: 0 }}
@@ -782,20 +741,21 @@ export default function WaiterDashboardPage({
 								</motion.div>
 							)}
 
-							{isLoadingOrder ? (
-								<div className="flex justify-center py-10">
-									<div className="animate-spin w-8 h-8 border-2 border-[#0F4C75] border-t-transparent rounded-full" />
-								</div>
-							) : !tableOrder ? (
-								selectedTable.status !== "calling" && (
-									<div className="text-center py-10 text-[#94A3B8]">
-										No active ticket found for this table.
+							{selectedTable.status !== "empty" && (
+								isLoadingOrder ? (
+									<div className="flex justify-center py-10">
+										<div className="animate-spin w-8 h-8 border-2 border-[#0F4C75] border-t-transparent rounded-full" />
 									</div>
-								)
-							) : (
-								<>
+								) : tableOrders.length === 0 ? (
+									selectedTable.status !== "calling" && (
+										<div className="text-center py-10 text-[#94A3B8]">
+											No active ticket found for this table.
+										</div>
+									)
+								) : (
+									<>
 									<div className="space-y-3">
-										{tableOrder.items.map((item) => (
+										{(tableOrders[0]?.items || []).map((item: any) => (
 											<div
 												key={item.id}
 												className="flex gap-4 p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl"
@@ -817,13 +777,13 @@ export default function WaiterDashboardPage({
 										))}
 									</div>
 
-									{tableOrder.special_requests && (
+									{tableOrders[0]?.special_requests && (
 										<div className="bg-amber-50 border border-amber-200 p-4 rounded-xl">
 											<p className="text-xs font-bold text-amber-800 uppercase mb-1">
 												Table Note
 											</p>
 											<p className="text-sm text-amber-900">
-												{tableOrder.special_requests}
+												{tableOrders[0]?.special_requests}
 											</p>
 										</div>
 									)}
@@ -836,14 +796,34 @@ export default function WaiterDashboardPage({
 											className="text-2xl font-black text-[#0F4C75]"
 											style={{ direction: "ltr" }}
 										>
-											{tableOrder.total_amount.toFixed(3)} KD
+											{tableOrders.reduce((s, o) => s + Number(o.total_amount), 0).toFixed(3)} KD
 										</span>
 									</div>
 								</>
-							)}
+							)
+						)}
 						</div>
 
 						{/* ── Action Footer ── */}
+						{selectedTable.status === "empty" && (
+							<div
+								className="px-6 py-5 bg-white border-t border-[#F1F5F9] flex flex-col gap-3"
+								style={{
+									paddingBottom: "max(20px, env(safe-area-inset-bottom))",
+								}}
+							>
+								<button
+									onClick={() => {
+										router.push(`/${slug}/menu?table=${selectedTable.table_number}&waiter_mode=true`);
+									}}
+									className="w-full h-14 bg-[#0F4C75] rounded-2xl text-white font-bold text-lg flex justify-center items-center gap-2 transition-transform active:scale-95 active:bg-[#0A3558]"
+								>
+									<span>Take Order</span>
+									<PlayCircle size={20} />
+								</button>
+							</div>
+						)}
+
 						{selectedTable.status === "calling" && (
 							<div
 								className="px-6 py-5 bg-white border-t border-[#F1F5F9] flex flex-col gap-3"
@@ -867,7 +847,7 @@ export default function WaiterDashboardPage({
 								</button>
 							</div>
 						)}
-						{tableOrder && selectedTable.status === "pending" && (
+						{tableOrders.some((o) => o.status === "pending") && selectedTable.status === "pending" && (
 							<div
 								className="px-6 py-5 bg-white border-t border-[#F1F5F9] flex flex-col gap-3"
 								style={{
@@ -901,7 +881,7 @@ export default function WaiterDashboardPage({
 								</button>
 							</div>
 						)}
-						{tableOrder && selectedTable.status === "active" && (
+						{tableOrders.length > 0 && selectedTable.status === "active" && (
 							<div
 								className="px-6 py-5 bg-white border-t border-[#F1F5F9]"
 								style={{
