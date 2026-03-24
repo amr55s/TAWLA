@@ -12,8 +12,8 @@ import {
 	Loader2,
 	Sparkles,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState, Suspense } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 const CUISINE_TYPES = [
@@ -35,7 +35,8 @@ const CUISINE_TYPES = [
 	"Café & Bakery",
 ];
 
-const TABLE_PRESETS = [5, 10, 15, 20, 25, 30];
+const FREE_TABLE_LIMIT = 5;
+const TABLE_PRESETS = [3, 5];
 
 const steps = [
 	{ id: 1, label: "Restaurant", icon: ChefHat },
@@ -43,8 +44,16 @@ const steps = [
 	{ id: 3, label: "Tables", icon: LayoutGrid },
 ];
 
-export default function OnboardingPage() {
+interface DetectedGeo {
+	country: string;
+	currency: string;
+	symbol: string;
+}
+
+function OnboardingInner() {
 	const router = useRouter();
+	const searchParams = useSearchParams();
+	const plan = searchParams.get("plan");
 	const supabase = createClient();
 
 	const [step, setStep] = useState(1);
@@ -66,7 +75,41 @@ export default function OnboardingPage() {
 	const [slugChecking, setSlugChecking] = useState(false);
 
 	// Step 3
-	const [tableCount, setTableCount] = useState(10);
+	const [tableCount, setTableCount] = useState(5);
+
+	// Auto-detected currency
+	const [detectedGeo, setDetectedGeo] = useState<DetectedGeo>({
+		country: "EG",
+		currency: "EGP",
+		symbol: "ج.م",
+	});
+
+	// Detect country/currency on mount — hardened with timeout + fallback
+	useEffect(() => {
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 3000); // 3s timeout
+
+		const detect = async () => {
+			try {
+				const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+				const res = await fetch(
+					`/api/detect-country?tz=${encodeURIComponent(tz)}`,
+					{ signal: controller.signal }
+				);
+				if (res.ok) {
+					const data = await res.json();
+					if (data?.currency) setDetectedGeo(data);
+				}
+			} catch {
+				// AbortError, NetworkError, or any other failure — keep defaults
+			} finally {
+				clearTimeout(timeoutId);
+			}
+		};
+
+		detect();
+		return () => controller.abort();
+	}, []);
 
 	// Auto-generate slug from restaurant name
 	useEffect(() => {
@@ -159,6 +202,8 @@ export default function OnboardingPage() {
 						slug,
 						cuisine_type: cuisineType,
 						owner_id: user.id,
+						currency_symbol: detectedGeo.symbol || "ج.م",
+						subscription_plan: "starter",
 					},
 				])
 				.select()
@@ -187,7 +232,11 @@ export default function OnboardingPage() {
 				throw tablesError;
 			}
 
-			router.push(`/${slug}/admin`);
+			if (plan === "pro" || plan === "enterprise") {
+				router.push(`/${slug}/admin/settings/checkout?plan=${plan}`);
+			} else {
+				router.push(`/${slug}/admin`);
+			}
 		} catch (err: any) {
 			if (err.code === "23505") {
 				setError("This URL is already taken. Please choose another one.");
@@ -343,7 +392,7 @@ export default function OnboardingPage() {
 									</label>
 									<div className="flex items-center gap-0 rounded-xl border border-[#E8ECF1] bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[#3282B8]/30 focus-within:border-[#3282B8] transition-all">
 										<span className="px-4 py-3.5 text-sm text-[#7B8BA3] bg-[#F5F7FA] border-r border-[#E8ECF1] whitespace-nowrap select-none">
-											tawla.app/
+											tawla.link/
 										</span>
 										<input
 											type="text"
@@ -434,13 +483,13 @@ export default function OnboardingPage() {
 									<input
 										type="number"
 										min={1}
-										max={100}
+										max={FREE_TABLE_LIMIT}
 										value={tableCount}
 										onChange={(e) =>
 											setTableCount(
 												Math.max(
 													1,
-													Math.min(100, parseInt(e.target.value) || 1),
+													Math.min(FREE_TABLE_LIMIT, parseInt(e.target.value) || 1),
 												),
 											)
 										}
@@ -451,6 +500,21 @@ export default function OnboardingPage() {
 										We'll create {tableCount} table{tableCount !== 1 ? "s" : ""}{" "}
 										for your restaurant.
 									</p>
+									<div className="mt-4 p-4 rounded-2xl bg-[#F0F7FC] border border-[#BBE1FA]/50 flex flex-col gap-3">
+										<div className="flex items-start gap-2">
+											<Sparkles size={16} className="text-[#3282B8] shrink-0 mt-0.5" />
+											<p className="text-xs text-[#3D4F6F] font-medium leading-relaxed">
+												You're starting on the <span className="text-[#0F4C75] font-bold">Free Starter Plan</span> (Limit: {FREE_TABLE_LIMIT} tables). 
+											</p>
+										</div>
+										<button
+											type="button"
+											onClick={() => router.push("/#pricing")}
+											className="text-[11px] font-bold text-[#3282B8] hover:text-[#0F4C75] transition-colors flex items-center gap-1 w-fit px-3 py-1.5 rounded-lg bg-white border border-[#BBE1FA] shadow-sm"
+										>
+											Need more tables? See Pro Plans <ArrowRight size={12} />
+										</button>
+									</div>
 								</div>
 							</motion.div>
 						)}
@@ -504,5 +568,13 @@ export default function OnboardingPage() {
 				</div>
 			</div>
 		</div>
+	);
+}
+
+export default function OnboardingPage() {
+	return (
+		<Suspense fallback={null}>
+			<OnboardingInner />
+		</Suspense>
 	);
 }

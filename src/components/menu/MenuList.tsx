@@ -15,6 +15,7 @@ import {
 } from "@/components/ui";
 import { useCartStore } from "@/store/cart";
 import type { Category, MenuItem, MenuItemWithCategory } from "@/types/database";
+import Image from "next/image";
 
 function MenuLoadingSkeleton() {
 	return (
@@ -319,6 +320,25 @@ export default function MenuList({
 					</div>
 				)}
 			</main>
+
+			{/* Powered By Footer */}
+			<div className="flex justify-center w-full mt-6 pb-12">
+				<a
+					href="https://tawla.link"
+					target="_blank"
+					rel="noopener noreferrer"
+					className="flex items-center gap-1.5 text-xs sm:text-sm text-text-muted hover:opacity-80 transition-opacity duration-300"
+				>
+					Create your own digital menu with
+					<Image
+						src="/logo.svg"
+						alt="Tawla Logo"
+						width={100}
+						height={28}
+						className="h-6 w-auto"
+					/>
+				</a>
+			</div>
 
 			{/* Floating Nav Bar */}
 			<FloatingNavBar restaurantSlug={slug} cartCount={cartCount} />

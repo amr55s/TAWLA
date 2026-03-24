@@ -1,51 +1,57 @@
 "use client";
 
 import posthog from "posthog-js";
-import { useEffect } from "react";
+import { PostHogProvider as PHProvider } from "posthog-js/react";
+import { useEffect, Suspense } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 
-declare global {
-	interface Window {
-		__POSTHOG_INITIALIZED__?: boolean;
-	}
+// PostHog pageview capturing component
+function PostHogPageview() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    if (pathname && posthog) {
+      let url = window.origin + pathname;
+      if (searchParams.toString()) {
+        url = url + `?${searchParams.toString()}`;
+      }
+      posthog.capture("$pageview", {
+        $current_url: url,
+      });
+    }
+  }, [pathname, searchParams]);
+
+  return null;
 }
 
-interface PostHogProviderProps {
-	children: React.ReactNode;
-}
+export function PostHogProvider({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+    const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://app.posthog.com";
 
-export function PostHogProvider({ children }: PostHogProviderProps) {
-	useEffect(() => {
-		if (typeof window === "undefined") return;
-		if (window.__POSTHOG_INITIALIZED__) return;
+    if (!posthogKey) {
+      if (process.env.NODE_ENV === "production") {
+        console.warn("PostHog key is missing. Tracking disabled.");
+      }
+      return;
+    }
 
-		const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-		const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST;
+    if (typeof window !== "undefined") {
+      posthog.init(posthogKey, {
+        api_host: posthogHost,
+        capture_pageview: false, // We'll handle this manually below
+        capture_pageleave: true,
+      });
+    }
+  }, []);
 
-		if (!posthogKey || !posthogHost) {
-			if (process.env.NODE_ENV === "development") {
-				console.warn(
-					"PostHog is not initialized: missing NEXT_PUBLIC_POSTHOG_KEY or NEXT_PUBLIC_POSTHOG_HOST.",
-				);
-			}
-			return;
-		}
-
-		// Prevent hanging and AbortErrors by entirely skipping tracking locally
-		if (process.env.NODE_ENV === "development") {
-			console.log("PostHog initialization skipped in development environment.");
-			return;
-		}
-
-		posthog.init(posthogKey, {
-			api_host: posthogHost,
-			autocapture: true,
-			capture_pageview: true,
-			capture_pageleave: true,
-			disable_session_recording: false,
-		});
-
-		window.__POSTHOG_INITIALIZED__ = true;
-	}, []);
-
-	return <>{children}</>;
+  return (
+    <PHProvider client={posthog}>
+      <Suspense fallback={null}>
+        <PostHogPageview />
+      </Suspense>
+      {children}
+    </PHProvider>
+  );
 }

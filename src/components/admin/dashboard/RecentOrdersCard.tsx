@@ -13,9 +13,17 @@ export interface RecentOrdersCardProps {
 	orders: RecentOrder[];
 	loading: boolean;
 	slug: string;
+	currency?: string;
+	emptyMessage?: string;
 }
 
-export function RecentOrdersCard({ orders, loading, slug }: RecentOrdersCardProps) {
+export function RecentOrdersCard({ 
+	orders, 
+	loading, 
+	slug, 
+	currency = "$", 
+	emptyMessage = "No recent orders" 
+}: RecentOrdersCardProps) {
 	const getStatusColor = (status: string) => {
 		switch (status) {
 			case "paid":
@@ -52,8 +60,8 @@ export function RecentOrdersCard({ orders, loading, slug }: RecentOrdersCardProp
 						<div className="w-6 h-6 border-2 border-[#0F4C75] border-t-transparent rounded-full animate-spin" />
 					</div>
 				) : orders.length === 0 ? (
-					<div className="flex h-full items-center justify-center p-8 text-center text-sm text-[#7B8BA3]">
-						No recent orders
+					<div className="flex h-full items-center justify-center p-8 text-center text-sm text-[#7B8BA3] font-medium italic">
+						{emptyMessage}
 					</div>
 				) : (
 					<table className="w-full">
@@ -88,7 +96,7 @@ export function RecentOrdersCard({ orders, loading, slug }: RecentOrdersCardProp
 											: "Takeaway"}
 									</td>
 									<td className="py-3 text-xs font-semibold text-[#0A1628]">
-										${Number(o.total_amount).toFixed(2)}
+										{currency}{Number(o.total_amount).toFixed(2)}
 									</td>
 									<td className="py-3">
 										<span

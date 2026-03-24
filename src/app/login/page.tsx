@@ -1,15 +1,19 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { AlertCircle, Lock, LogIn, Mail } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { AlertCircle, Lock, Mail, Sparkles, LogIn, ArrowRight } from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import posthog from "posthog-js";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { LogoBrand } from "@/components/ui/LogoBrand";
 
-export default function LoginPage() {
+function LoginInner() {
 	const router = useRouter();
+	const searchParams = useSearchParams();
+	const plan = searchParams.get("plan");
 	const supabase = createClient();
 
 	const [email, setEmail] = useState("");
@@ -84,32 +88,40 @@ export default function LoginPage() {
 			| string
 			| undefined;
 
-		// Force Next.js server components to re-run and discover the new auth cookie
 		router.refresh();
 
+		if (user.email === "amrkhaled.contact@gmail.com") {
+			router.push("/super-admin");
+			return;
+		}
+
 		if (role === "admin" || !role) {
-			// Fetch the restaurant slug for this admin/owner
-			const { data: restaurant } = await supabase
+			const { data: restaurants } = await supabase
 				.from("restaurants")
 				.select("slug")
 				.eq("owner_id", user.id)
-				.maybeSingle();
+				.limit(1);
+			const restaurant = restaurants?.[0];
 
 			if (restaurant?.slug) {
 				router.push(`/${restaurant.slug}/admin`);
 				return;
 			}
-			// No restaurant yet — send to onboarding
-			router.push("/onboarding");
+			if (plan) {
+				router.push(`/onboarding?plan=${plan}`);
+			} else {
+				router.push("/onboarding");
+			}
 			return;
 		}
 
 		if ((role === "cashier" || role === "waiter") && restaurantId) {
-			const { data: restaurant } = await supabase
+			const { data: restaurants } = await supabase
 				.from("restaurants")
 				.select("slug")
 				.eq("id", restaurantId)
-				.maybeSingle();
+				.limit(1);
+			const restaurant = restaurants?.[0];
 
 			if (restaurant?.slug) {
 				router.push(`/${restaurant.slug}/${role}`);
@@ -122,51 +134,75 @@ export default function LoginPage() {
 	};
 
 	return (
-		<div className="min-h-screen flex items-center justify-center bg-background px-5">
-			<motion.div
-				initial={{ opacity: 0, y: 20 }}
-				animate={{ opacity: 1, y: 0 }}
-				transition={{ duration: 0.4 }}
-				className="w-full max-w-sm"
-			>
-				{/* Logo area */}
-				<div className="text-center mb-8">
-					<div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-						<LogIn size={28} className="text-primary" />
+		<div className="min-h-screen flex">
+			{/* Left — Brand Panel */}
+			<div className="hidden lg:flex lg:w-[45%] relative bg-gradient-to-br from-[#0F4C75] via-[#0A3558] to-[#071A2E] flex-col justify-between p-12 overflow-hidden">
+				{/* Decorative elements */}
+				<div className="absolute top-[15%] right-[-10%] w-[400px] h-[400px] rounded-full bg-[#3282B8]/10 blur-[100px]" />
+				<div className="absolute bottom-[20%] left-[-5%] w-[300px] h-[300px] rounded-full bg-[#BBE1FA]/8 blur-[80px]" />
+
+				<div className="relative z-10">
+					<LogoBrand variant="footer" className="scale-110 origin-left" />
+				</div>
+
+				<div className="relative z-10 space-y-6">
+					<div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/15 text-[#BBE1FA] text-xs font-semibold tracking-wider uppercase">
+						<Sparkles size={12} />
+						Partner Portal
 					</div>
-					<h1 className="text-2xl font-bold text-text-heading">Staff Login</h1>
-					<p className="text-sm text-text-muted mt-1">
-						Sign in to manage your restaurant
+					<h2 className="text-4xl lg:text-5xl font-bold text-white leading-[1.1] tracking-tight font-display">
+						Control your restaurant,
+						<br />
+						<span className="text-[#BBE1FA]">from anywhere.</span>
+					</h2>
+					<p className="text-base text-[#BBE1FA]/70 max-w-md leading-relaxed">
+						Sign in to access your dashboard, manage your menu, and track
+						real-time operations with Tawla's autonomous intelligence.
 					</p>
 				</div>
 
-				{/* Login card */}
-				<div
-					className="rounded-2xl p-6 border border-white/40 shadow-card"
-					style={{
-						background: "rgba(255, 255, 255, 0.75)",
-						backdropFilter: "blur(20px)",
-						WebkitBackdropFilter: "blur(20px)",
-					}}
+				<div className="relative z-10">
+					<p className="text-xs text-white/30">
+						© 2026 Tawla. All rights reserved.
+					</p>
+				</div>
+			</div>
+
+			{/* Right — Form */}
+			<div className="flex-1 flex items-center justify-center px-6 py-12 bg-[#F8FAFB]">
+				<motion.div
+					initial={{ opacity: 0, y: 20 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ duration: 0.4 }}
+					className="w-full max-w-[420px]"
 				>
+					{/* Mobile logo */}
+					<div className="lg:hidden mb-8">
+						<LogoBrand variant="primary" className="scale-110 origin-left" />
+					</div>
+
+					<h1 className="text-[28px] font-bold text-[#0A1628] tracking-tight mb-2">
+						Welcome Back
+					</h1>
+					<p className="text-sm text-[#7B8BA3] mb-8">
+						Sign in to the staff intelligence portal.
+					</p>
+
 					{authError && (
-						<div className="mb-4 bg-red-50 text-red-600 border border-red-200 p-3 rounded-md text-sm flex items-center gap-2">
+						<div className="mb-6 px-4 py-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm flex items-center gap-2">
 							<AlertCircle size={16} className="shrink-0" />
 							<p>{authError}</p>
 						</div>
 					)}
 
-					<form onSubmit={handleLogin} className="space-y-4">
+					<form onSubmit={handleLogin} className="space-y-5">
 						{/* Email */}
 						<div>
-							<label className="text-xs font-semibold text-text-secondary mb-1.5 block">
+							<label className="block text-xs font-semibold text-[#3D4F6F] mb-2 uppercase tracking-wider">
 								Email
 							</label>
 							<div className="relative">
-								<Mail
-									size={16}
-									className="absolute start-3 top-1/2 -translate-y-1/2 text-text-muted"
-								/>
+								<Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#7B8BA3]" />
 								<input
 									type="email"
 									autoComplete="email"
@@ -177,15 +213,13 @@ export default function LoginPage() {
 									}}
 									disabled={loading}
 									placeholder="you@restaurant.com"
-									className={`w-full py-3 ps-10 pe-3 bg-background border ${
-										emailError
-											? "border-red-500 focus:border-red-500"
-											: "border-border-light focus:border-primary"
-									} rounded-xl text-sm text-text-body placeholder:text-text-muted focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+									className={`w-full pl-11 pr-4 py-3.5 rounded-xl bg-white border ${
+										emailError ? "border-red-500" : "border-slate-200"
+									} text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#3282B8]/30 focus:border-[#3282B8] transition-all disabled:opacity-50`}
 								/>
 							</div>
 							{emailError && (
-								<p className="mt-1.5 text-xs text-red-500 font-medium">
+								<p className="mt-1.5 text-xs text-red-500 font-medium whitespace-nowrap overflow-hidden text-ellipsis">
 									{emailError}
 								</p>
 							)}
@@ -193,14 +227,11 @@ export default function LoginPage() {
 
 						{/* Password */}
 						<div>
-							<label className="text-xs font-semibold text-text-secondary mb-1.5 block">
+							<label className="block text-xs font-semibold text-[#3D4F6F] mb-2 uppercase tracking-wider">
 								Password
 							</label>
 							<div className="relative">
-								<Lock
-									size={16}
-									className="absolute start-3 top-1/2 -translate-y-1/2 text-text-muted"
-								/>
+								<Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#7B8BA3]" />
 								<input
 									type="password"
 									autoComplete="current-password"
@@ -212,43 +243,56 @@ export default function LoginPage() {
 									}}
 									disabled={loading}
 									placeholder="Enter your password"
-									className={`w-full py-3 ps-10 pe-3 bg-background border ${
-										passwordError
-											? "border-red-500 focus:border-red-500"
-											: "border-border-light focus:border-primary"
-									} rounded-xl text-sm text-text-body placeholder:text-text-muted focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+									className={`w-full pl-11 pr-4 py-3.5 rounded-xl bg-white border ${
+										passwordError ? "border-red-500" : "border-slate-200"
+									} text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#3282B8]/30 focus:border-[#3282B8] transition-all disabled:opacity-50`}
 								/>
 							</div>
 							{passwordError && (
-								<p className="mt-1.5 text-xs text-red-500 font-medium">
+								<p className="mt-1.5 text-xs text-red-500 font-medium whitespace-nowrap overflow-hidden text-ellipsis">
 									{passwordError}
 								</p>
 							)}
 						</div>
 
-						{/* Submit */}
 						<motion.button
 							type="submit"
 							whileTap={!loading ? { scale: 0.97 } : undefined}
 							disabled={loading}
-							className="w-full py-3 mt-2 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-2 transition-colors disabled:cursor-not-allowed"
+							className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-[#0F4C75] text-white font-semibold text-sm
+                                 hover:bg-[#0A3558] active:scale-[0.98] transition-all duration-300 disabled:opacity-60
+                                 shadow-[0_4px_14px_rgba(15,76,117,0.25)]"
 						>
 							{loading ? (
-								<>
-									<div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-									Signing in...
-								</>
+								<div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
 							) : (
-								"Sign In"
+								<>
+									Sign In <ArrowRight size={16} />
+								</>
 							)}
 						</motion.button>
 					</form>
-				</div>
 
-				<p className="text-center text-xs text-text-muted mt-6">
-					Guest? No login needed — just scan the QR code.
-				</p>
-			</motion.div>
+					<p className="mt-8 text-center text-sm text-[#7B8BA3]">
+						Don't have an account?{" "}
+						<Link
+							href="/register"
+							className="text-[#3282B8] font-semibold hover:underline"
+						>
+							Register Restaurant
+						</Link>
+					</p>
+				</motion.div>
+			</div>
 		</div>
 	);
 }
+
+export default function LoginPage() {
+	return (
+		<Suspense fallback={null}>
+			<LoginInner />
+		</Suspense>
+	);
+}
+

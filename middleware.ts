@@ -2,6 +2,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 const AUTH_ROUTES = ['/login', '/register', '/onboarding'];
+const SUPER_ADMIN_EMAIL = 'amrkhaled.contact@gmail.com';
 
 function isAdminRoute(pathname: string): boolean {
   // Match /:slug/admin or /:slug/admin/*
@@ -12,8 +13,12 @@ function isStaffRoute(pathname: string): boolean {
   return pathname.includes('/cashier') || pathname.includes('/waiter');
 }
 
+function isSuperAdminRoute(pathname: string): boolean {
+  return pathname === '/super-admin' || pathname.startsWith('/super-admin/');
+}
+
 function isProtectedRoute(pathname: string): boolean {
-  return isAdminRoute(pathname) || isStaffRoute(pathname);
+  return isAdminRoute(pathname) || isStaffRoute(pathname) || isSuperAdminRoute(pathname);
 }
 
 function isAuthRoute(pathname: string): boolean {
@@ -60,14 +65,27 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // ── Super Admin shortcut: redirect super admin to /super-admin ──
+  if (user && user.email === SUPER_ADMIN_EMAIL && (isAuthRoute(pathname) || isPublicRedirectRoute(pathname))) {
+    return NextResponse.redirect(new URL('/super-admin', request.url));
+  }
+
+  // ── Super Admin route guard: only the super admin email can access ──
+  if (pathname.startsWith('/super-admin')) {
+    if (!user || user.email !== SUPER_ADMIN_EMAIL) {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+  }
+
   // ── Authenticated users visiting auth/public routes → redirect to /{slug}/admin ──
   if (user && (isAuthRoute(pathname) || isPublicRedirectRoute(pathname))) {
     // Resolve slug for redirect
-    const { data: restaurant } = await supabase
+    const { data: restaurants } = await supabase
       .from('restaurants')
       .select('slug')
       .eq('owner_id', user.id)
-      .maybeSingle();
+      .limit(1);
+    const restaurant = restaurants?.[0];
 
     if (restaurant?.slug) {
       return NextResponse.redirect(new URL(`/${restaurant.slug}/admin`, request.url));
@@ -122,6 +140,7 @@ export const config = {
     '/register',
     '/onboarding',
     '/login',
+    '/super-admin/:path*',
     '/:slug/admin/:path*',
     '/:slug/cashier/:path*',
     '/:slug/waiter/:path*',

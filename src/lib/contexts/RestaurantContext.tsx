@@ -7,6 +7,7 @@ import {
 	useEffect,
 	useState,
 } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 interface RestaurantContextType {
@@ -14,6 +15,10 @@ interface RestaurantContextType {
 	slug: string | null;
 	loading: boolean;
 	error: string | null;
+	subscriptionStatus: string | null;
+	trialEndsAt: string | null;
+	isActive: boolean | null;
+	currencySymbol: string;
 }
 
 const RestaurantContext = createContext<RestaurantContextType>({
@@ -21,6 +26,10 @@ const RestaurantContext = createContext<RestaurantContextType>({
 	slug: null,
 	loading: true,
 	error: null,
+	subscriptionStatus: null,
+	trialEndsAt: null,
+	isActive: null,
+	currencySymbol: "EGP",
 });
 
 export function RestaurantProvider({
@@ -36,12 +45,18 @@ export function RestaurantProvider({
 	const [slug, setSlug] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
+	const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
+	const [isActive, setIsActive] = useState<boolean | null>(null);
+	const [currencySymbol, setCurrencySymbol] = useState<string>("EGP");
+
+	const router = useRouter();
 
 	useEffect(() => {
 		let mounted = true;
+		const supabase = createClient();
 		const fetchRestaurant = async () => {
 			try {
-				const supabase = createClient();
 				const {
 					data: { user },
 					error: authError,
@@ -58,7 +73,7 @@ export function RestaurantProvider({
 				if (initialSlug) {
 					const { data, error: dbError } = await supabase
 						.from("restaurants")
-						.select("id, owner_id, slug")
+						.select("id, owner_id, slug, subscription_status, trial_ends_at, is_active, currency_symbol")
 						.eq("slug", initialSlug)
 						.maybeSingle();
 
@@ -82,9 +97,15 @@ export function RestaurantProvider({
 
 					currentRestId = data.id;
 					currentSlug = data.slug;
+					if (mounted) {
+						setSubscriptionStatus(data.subscription_status ?? null);
+						setTrialEndsAt(data.trial_ends_at ?? null);
+						setIsActive(data.is_active ?? null);
+						setCurrencySymbol((data as any).currency_symbol || "EGP");
+					}
 				} else {
 					// Fallback if no initialSlug provided
-					let query = supabase.from("restaurants").select("id, slug");
+					let query = supabase.from("restaurants").select("id, slug, subscription_status, trial_ends_at, is_active");
 
 					if (currentRestId) {
 						query = query.or(`owner_id.eq.${user.id},id.eq.${currentRestId}`);
@@ -98,7 +119,12 @@ export function RestaurantProvider({
 					if (data && data.length > 0) {
 						currentRestId = data[0].id;
 						currentSlug = data[0].slug;
-
+						if (mounted) {
+							setSubscriptionStatus(data[0].subscription_status ?? null);
+							setTrialEndsAt(data[0].trial_ends_at ?? null);
+							setIsActive(data[0].is_active ?? null);
+							setCurrencySymbol((data[0] as any).currency_symbol || "EGP");
+						}
 						if (requireAdmin) {
 							const role = user.user_metadata?.role;
 							if (role === 'waiter' || role === 'cashier') {
@@ -116,8 +142,19 @@ export function RestaurantProvider({
 					setSlug(currentSlug);
 				}
 			} catch (err: any) {
-				console.error("Restaurant fetch error:", err.message || err);
-				if (mounted) setError(err.message || "Failed to initialize context");
+				const msg = err.message || "";
+				if (msg.includes("Auth session missing") || msg.includes("JWT")) {
+					if (mounted) {
+						setRestaurantId(null);
+						setSlug(null);
+					}
+					if (requireAdmin) {
+						router.push("/login");
+					}
+				} else {
+					console.error("Restaurant fetch error:", msg || err);
+					if (mounted) setError(msg || "Failed to initialize context");
+				}
 			} finally {
 				if (mounted) setLoading(false);
 			}
@@ -125,13 +162,30 @@ export function RestaurantProvider({
 
 		fetchRestaurant();
 
+		const {
+			data: { subscription },
+		} = supabase.auth.onAuthStateChange((event, session) => {
+			if (event === "SIGNED_OUT") {
+				if (mounted) {
+					setRestaurantId(null);
+					setSlug(null);
+				}
+				router.push("/login");
+			} else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+				if (mounted) {
+					fetchRestaurant();
+				}
+			}
+		});
+
 		return () => {
 			mounted = false;
+			subscription.unsubscribe();
 		};
-	}, [initialSlug]);
+	}, [initialSlug, requireAdmin, router]);
 
 	return (
-		<RestaurantContext.Provider value={{ restaurantId, slug, loading, error }}>
+		<RestaurantContext.Provider value={{ restaurantId, slug, loading, error, subscriptionStatus, trialEndsAt, isActive, currencySymbol }}>
 			{children}
 		</RestaurantContext.Provider>
 	);

@@ -262,9 +262,9 @@ export default function AdminAnalyticsPage() {
 					{/* Action Buttons */}
 					<Dialog open={expOpen} onOpenChange={setExpOpen}>
 						<DialogTrigger>
-							<button className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-red-50 border border-red-100 text-sm font-semibold text-red-600 hover:bg-red-100 transition-colors">
+							<div className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-red-50 border border-red-100 text-sm font-semibold text-red-600 hover:bg-red-100 transition-colors cursor-pointer">
 								<Minus size={14} /> Add Expense
-							</button>
+							</div>
 						</DialogTrigger>
 						<DialogContent className="sm:max-w-md">
 							<DialogHeader>
@@ -342,9 +342,9 @@ export default function AdminAnalyticsPage() {
 
 					<Dialog open={incOpen} onOpenChange={setIncOpen}>
 						<DialogTrigger>
-							<button className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-100 text-sm font-semibold text-emerald-600 hover:bg-emerald-100 transition-colors">
+							<div className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-100 text-sm font-semibold text-emerald-600 hover:bg-emerald-100 transition-colors cursor-pointer">
 								<Plus size={14} /> Add Income
-							</button>
+							</div>
 						</DialogTrigger>
 						<DialogContent className="sm:max-w-md">
 							<DialogHeader>

@@ -13,6 +13,7 @@ export interface StaffOnDutyCardProps {
 	staff: StaffMember[];
 	loading: boolean;
 	slug: string;
+	emptyMessage?: string;
 }
 
 function getStaffStatus(member: StaffMember) {
@@ -56,7 +57,7 @@ function getStaffStatus(member: StaffMember) {
 	return { status, displayLabel, colorCls, textCls, bgCls };
 }
 
-export function StaffOnDutyCard({ staff, loading, slug }: StaffOnDutyCardProps) {
+export function StaffOnDutyCard({ staff, loading, slug, emptyMessage = "No staff found" }: StaffOnDutyCardProps) {
 	// Reorder staff: Active first, then Idle, then Offline.
 	const enhancedStaff = staff.map((s) => ({
 		...s,
@@ -96,8 +97,8 @@ export function StaffOnDutyCard({ staff, loading, slug }: StaffOnDutyCardProps) 
 						<div className="w-6 h-6 border-2 border-[#0F4C75] border-t-transparent rounded-full animate-spin" />
 					</div>
 				) : enhancedStaff.length === 0 ? (
-					<div className="flex h-full items-center justify-center p-8 text-center text-sm text-[#7B8BA3]">
-						No staff found
+					<div className="flex h-full items-center justify-center p-8 text-center text-sm text-[#7B8BA3] font-medium italic">
+						{emptyMessage}
 					</div>
 				) : (
 					enhancedStaff.map((s) => (

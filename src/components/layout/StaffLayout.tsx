@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "./ThemeToggle";
+import { LogoBrand } from "@/components/ui/LogoBrand";
 
 export interface NavigationItem {
 	name: string;
@@ -93,14 +94,7 @@ export function StaffLayout({
 			{/* Desktop Sidebar */}
 			<aside className="hidden lg:flex w-[260px] flex-col border-r border-border bg-card/30 backdrop-blur-xl shrink-0">
 				<div className="flex h-16 items-center px-6">
-					<Link href="/" className="flex items-center gap-2.5 outline-none ring-ring focus-visible:ring-2 rounded-lg">
-						<div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
-							<span className="text-primary-foreground text-sm font-bold leading-none">
-								{brandName.charAt(0)}
-							</span>
-						</div>
-						<span className="text-lg font-bold tracking-tight">{brandName}</span>
-					</Link>
+					<LogoBrand variant="primary" logoClassName="h-6" className="outline-none ring-ring focus-visible:ring-2 rounded-lg" />
 				</div>
 				<div className="flex-1 overflow-y-auto py-4 scrollbar-hide">
 					<SidebarNav />
@@ -121,7 +115,7 @@ export function StaffLayout({
 							<SheetContent side="left" className="w-[280px] p-0 flex flex-col bg-card/95 backdrop-blur-xl border-border">
 								<SheetTitle className="sr-only">Navigation Menu</SheetTitle>
 								<div className="flex h-16 items-center px-6 border-b border-border">
-									<span className="text-lg font-bold tracking-tight">{brandName}</span>
+									<LogoBrand variant="primary" logoClassName="h-6" />
 								</div>
 								<div className="flex-1 overflow-y-auto py-4">
 									<SidebarNav isMobile />

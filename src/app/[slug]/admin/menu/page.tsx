@@ -185,11 +185,38 @@ export default function AdminMenuPage() {
 			</div>
 
 			{/* Items grid */}
-			{items.length === 0 ? (
-				<div className="bg-background-card rounded-2xl p-12 text-center shadow-card">
-					<p className="text-text-muted">
-						No menu items yet. Add your first item.
+			{categories.length === 0 ? (
+				<div className="bg-white rounded-2xl border border-[#E8ECF1] p-12 text-center shadow-sm">
+					<div className="w-16 h-16 rounded-2xl bg-[#BBE1FA]/20 border border-[#BBE1FA]/40 flex items-center justify-center mx-auto mb-5">
+						<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#3282B8]"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+					</div>
+					<h3 className="text-lg font-bold text-[#0A1628] mb-2">Your menu is waiting for its first masterpiece 🎨</h3>
+					<p className="text-sm text-[#7B8BA3] mb-6 max-w-sm mx-auto">
+						Start by creating a category (e.g. "Main Dishes", "Beverages"), then add your delicious items to it.
 					</p>
+					<motion.button
+						whileTap={{ scale: 0.96 }}
+						onClick={openCategoryCreate}
+						className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#0F4C75] hover:bg-[#0A3558] text-white text-sm font-semibold transition-colors shadow-[0_4px_14px_rgba(15,76,117,0.25)]"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+						Add Your First Category
+					</motion.button>
+				</div>
+			) : items.length === 0 ? (
+				<div className="bg-white rounded-2xl border border-[#E8ECF1] p-12 text-center shadow-sm">
+					<h3 className="text-lg font-bold text-[#0A1628] mb-2">No menu items yet</h3>
+					<p className="text-sm text-[#7B8BA3] mb-6">
+						You have {categories.length} categor{categories.length === 1 ? "y" : "ies"}. Add your first item to get started.
+					</p>
+					<motion.button
+						whileTap={{ scale: 0.96 }}
+						onClick={openCreate}
+						className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#0F4C75] hover:bg-[#0A3558] text-white text-sm font-semibold transition-colors shadow-[0_4px_14px_rgba(15,76,117,0.25)]"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+						Add First Menu Item
+					</motion.button>
 				</div>
 			) : (
 				<div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

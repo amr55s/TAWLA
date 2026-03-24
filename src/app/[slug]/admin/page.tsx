@@ -126,7 +126,7 @@ export default function AdminDashboardPage() {
 		};
 	}, [restaurantId]);
 
-	const currency = "$"; // Could fetch from restaurants table later
+	const currency = (metrics as any)?.currency_symbol || "$";
 
 	// Calculate DonutChart Data
 	const totalDonut = metrics.total_orders;
@@ -226,6 +226,8 @@ export default function AdminDashboardPage() {
 						orders={metrics.recent_orders || []}
 						loading={ctxLoading || loading}
 						slug={slug || ""}
+						currency={currency}
+						emptyMessage="The kitchen is quiet... for now. Take a deep breath! 🧘‍♂️"
 					/>
 				</div>
 				<div className="lg:col-span-2">
@@ -233,6 +235,7 @@ export default function AdminDashboardPage() {
 						staff={metrics.staff_on_duty || []}
 						loading={ctxLoading || loading}
 						slug={slug || ""}
+						emptyMessage="No staff on duty yet. Time to assemble the team! 👨‍🍳"
 					/>
 				</div>
 			</div>

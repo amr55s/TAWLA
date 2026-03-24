@@ -2,13 +2,16 @@
 
 import { ArrowRight, Eye, EyeOff, Lock, Mail, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import posthog from "posthog-js";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { LogoBrand } from "@/components/ui/LogoBrand";
 
-export default function RegisterPage() {
+function RegisterInner() {
 	const router = useRouter();
+	const searchParams = useSearchParams();
+	const plan = searchParams.get("plan");
 	const supabase = createClient();
 
 	const [email, setEmail] = useState("");
@@ -50,7 +53,11 @@ export default function RegisterPage() {
 			email,
 		});
 
-		router.push("/onboarding");
+		if (plan) {
+			router.push(`/onboarding?plan=${plan}`);
+		} else {
+			router.push("/onboarding");
+		}
 	};
 
 	return (
@@ -62,12 +69,7 @@ export default function RegisterPage() {
 				<div className="absolute bottom-[20%] left-[-5%] w-[300px] h-[300px] rounded-full bg-[#BBE1FA]/8 blur-[80px]" />
 
 				<div className="relative z-10">
-					<Link
-						href="/"
-						className="text-2xl font-bold text-white tracking-tight font-display"
-					>
-						Tawla
-					</Link>
+					<LogoBrand variant="footer" className="scale-110 origin-left" />
 				</div>
 
 				<div className="relative z-10 space-y-6">
@@ -97,13 +99,9 @@ export default function RegisterPage() {
 			{/* Right — Form */}
 			<div className="flex-1 flex items-center justify-center px-6 py-12 bg-[#F8FAFB]">
 				<div className="w-full max-w-[420px]">
-					{/* Mobile logo */}
-					<Link
-						href="/"
-						className="lg:hidden text-2xl font-bold text-[#0F4C75] tracking-tight font-display block mb-8"
-					>
-						Tawla
-					</Link>
+					<div className="lg:hidden mb-8">
+						<LogoBrand variant="primary" className="scale-110 origin-left" />
+					</div>
 
 					<h1 className="text-[28px] font-bold text-[#0A1628] tracking-tight mb-2">
 						Create your account
@@ -136,8 +134,8 @@ export default function RegisterPage() {
 									onChange={(e) => setEmail(e.target.value)}
 									required
 									placeholder="you@restaurant.com"
-									className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-white border border-[#E8ECF1] text-sm text-[#0A1628]
-                             placeholder:text-[#B0B8C4] focus:outline-none focus:ring-2 focus:ring-[#3282B8]/30 focus:border-[#3282B8]
+									className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-white border border-slate-200 text-sm text-slate-900
+                             placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#3282B8]/30 focus:border-[#3282B8]
                              transition-all"
 								/>
 							</div>
@@ -160,8 +158,8 @@ export default function RegisterPage() {
 									onChange={(e) => setPassword(e.target.value)}
 									required
 									placeholder="Min. 6 characters"
-									className="w-full pl-11 pr-12 py-3.5 rounded-xl bg-white border border-[#E8ECF1] text-sm text-[#0A1628]
-                             placeholder:text-[#B0B8C4] focus:outline-none focus:ring-2 focus:ring-[#3282B8]/30 focus:border-[#3282B8]
+									className="w-full pl-11 pr-12 py-3.5 rounded-xl bg-white border border-slate-200 text-sm text-slate-900
+                             placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#3282B8]/30 focus:border-[#3282B8]
                              transition-all"
 								/>
 								<button
@@ -191,8 +189,8 @@ export default function RegisterPage() {
 									onChange={(e) => setConfirmPassword(e.target.value)}
 									required
 									placeholder="Re-enter your password"
-									className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-white border border-[#E8ECF1] text-sm text-[#0A1628]
-                             placeholder:text-[#B0B8C4] focus:outline-none focus:ring-2 focus:ring-[#3282B8]/30 focus:border-[#3282B8]
+									className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-white border border-slate-200 text-sm text-slate-900
+                             placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#3282B8]/30 focus:border-[#3282B8]
                              transition-all"
 								/>
 							</div>
@@ -227,5 +225,13 @@ export default function RegisterPage() {
 				</div>
 			</div>
 		</div>
+	);
+}
+
+export default function RegisterPage() {
+	return (
+		<Suspense fallback={null}>
+			<RegisterInner />
+		</Suspense>
 	);
 }

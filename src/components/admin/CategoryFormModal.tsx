@@ -109,6 +109,7 @@ export function CategoryFormModal({
 	return (
 		<AnimatePresence>
 			<motion.div
+				key="category-modal-backdrop"
 				initial={{ opacity: 0 }}
 				animate={{ opacity: 1 }}
 				exit={{ opacity: 0 }}
@@ -116,6 +117,7 @@ export function CategoryFormModal({
 				className="fixed inset-0 bg-black/40 z-50"
 			/>
 			<motion.div
+				key="category-modal-panel"
 				initial={{ opacity: 0, y: 40 }}
 				animate={{ opacity: 1, y: 0 }}
 				exit={{ opacity: 0, y: 40 }}

@@ -1,6 +1,7 @@
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
-import { Playfair_Display, Plus_Jakarta_Sans, Tajawal, Geist } from "next/font/google";
+import { Playfair_Display, Plus_Jakarta_Sans, Geist } from "next/font/google";
+import localFont from "next/font/local";
 import { Toaster } from "@/components/ui/sonner";
 import { PostHogProvider } from "@/providers/PostHogProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
@@ -21,10 +22,14 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 	display: "swap",
 });
 
-const tajawal = Tajawal({
-	variable: "--font-tajawal",
-	subsets: ["arabic"],
-	weight: ["300", "400", "500", "700"],
+const dinNext = localFont({
+	src: [
+		{ path: "../../public/fonts/DINNextLTArabic-Light.woff2", weight: "300", style: "normal" },
+		{ path: "../../public/fonts/DINNextLTArabic-Regular.woff2", weight: "400", style: "normal" },
+		{ path: "../../public/fonts/DINNextLTArabic-Medium.woff2", weight: "500", style: "normal" },
+		{ path: "../../public/fonts/DINNextLTArabic-Bold.woff2", weight: "700", style: "normal" },
+	],
+	variable: "--font-din-next",
 	display: "swap",
 });
 
@@ -42,10 +47,18 @@ export const metadata: Metadata = {
 	keywords: ["restaurant", "management", "saas", "menu", "tawla", "platform"],
 	authors: [{ name: "Tawla" }],
 	manifest: "/manifest.json",
+	icons: {
+		icon: "/favicon.svg",
+		shortcut: "/favicon.svg",
+		apple: "/favicon.svg",
+	},
 	appleWebApp: {
 		capable: true,
 		statusBarStyle: "default",
 		title: "Tawla",
+	},
+	other: {
+		"spaceremit-verification": "8VBGII17A1IG807E2TJ05HB3X6R6UUALMLIT9ZTIJ1KROIAQ2H",
 	},
 };
 
@@ -57,6 +70,8 @@ export const viewport: Viewport = {
 	themeColor: "#0F4C75",
 };
 
+import { GoogleAnalytics } from "@next/third-parties/google";
+
 export default function RootLayout({
 	children,
 }: Readonly<{
@@ -66,14 +81,15 @@ export default function RootLayout({
 		<html lang="en" dir="ltr" suppressHydrationWarning>
 			<body
 				suppressHydrationWarning
-				className={`${geistSans.variable} font-sans ${plusJakartaSans.variable} ${tajawal.variable} ${playfairDisplay.variable} bg-background text-foreground antialiased min-h-screen transition-colors duration-200`}
+				className={`${geistSans.variable} ${plusJakartaSans.variable} ${dinNext.variable} ${playfairDisplay.variable} font-sans bg-background text-foreground antialiased min-h-screen transition-colors duration-200`}
 			>
+				<GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || ""} />
 				<TooltipProvider>
 					<ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
 						<ReactQueryProvider>
 							<PostHogProvider>{children}</PostHogProvider>
 							<Analytics />
-							<Toaster position="top-right" richColors closeButton />
+							<Toaster position="top-right" closeButton />
 						</ReactQueryProvider>
 					</ThemeProvider>
 				</TooltipProvider>

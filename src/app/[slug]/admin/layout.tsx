@@ -2,18 +2,22 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import {
+	AlertCircle,
 	BarChart3,
 	Bell,
 	ChevronDown,
 	ClipboardList,
 	Copy,
+	CreditCard,
 	ExternalLink,
 	Globe,
 	LayoutDashboard,
 	LogOut,
 	Menu,
+	QrCode,
 	Search,
 	Settings,
+	Sparkles,
 	Users,
 	UtensilsCrossed,
 	X,
@@ -27,12 +31,13 @@ import {
 	useRestaurant,
 } from "@/lib/contexts/RestaurantContext";
 import { createClient } from "@/lib/supabase/client";
+import { LogoBrand } from "@/components/ui/LogoBrand";
 
 function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 	const pathname = usePathname();
 	const params = useParams();
 	const urlSlug = params.slug as string;
-	const { slug: contextSlug, restaurantId } = useRestaurant();
+	const { slug: contextSlug, restaurantId, subscriptionStatus, trialEndsAt, isActive: isRestaurantActive } = useRestaurant();
 	const slug = urlSlug || contextSlug || "";
 	const basePath = `/${slug}/admin`;
 
@@ -181,13 +186,19 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 		{ label: "Dashboard", href: basePath, icon: LayoutDashboard },
 		{ label: "Orders", href: `${basePath}/orders`, icon: ClipboardList },
 		{ label: "Menu", href: `${basePath}/menu`, icon: UtensilsCrossed },
+		{ label: "QR Codes", href: `${basePath}/qr-codes`, icon: QrCode },
 		{ label: "Analytics", href: `${basePath}/analytics`, icon: BarChart3 },
 		{ label: "Staff", href: `${basePath}/staff`, icon: Users },
 		{ label: "Settings", href: `${basePath}/settings`, icon: Settings },
+		{ label: "Billing", href: `${basePath}/settings/billing`, icon: CreditCard },
 	];
 
 	const isActive = (href: string) => {
 		if (href === basePath) return pathname === basePath;
+		// Prevent Settings from highlighting when a sub-route like Billing is active
+		if (href === `${basePath}/settings` && pathname.startsWith(`${basePath}/settings/`)) {
+			return false;
+		}
 		return pathname.startsWith(href);
 	};
 
@@ -197,6 +208,89 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 		setCopied(true);
 		setTimeout(() => setCopied(false), 2000);
 	};
+
+	const [supportSubject, setSupportSubject] = useState("");
+	const [supportMessage, setSupportMessage] = useState("");
+	const [supportSubmitting, setSupportSubmitting] = useState(false);
+
+	const handleSupportSubmit = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (!supportSubject || !supportMessage || !restaurantId) return;
+		setSupportSubmitting(true);
+		const supabase = createClient();
+		const { error } = await supabase.from("support_tickets").insert([
+			{
+				restaurant_id: restaurantId,
+				subject: supportSubject,
+				message: supportMessage,
+			},
+		]);
+		setSupportSubmitting(false);
+		if (error) {
+			toast.error(error.message || "Failed to submit ticket.");
+		} else {
+			toast.success("Support ticket submitted successfully. We will be in touch soon!");
+			setSupportSubject("");
+			setSupportMessage("");
+		}
+	};
+
+	if (isRestaurantActive === false) {
+		return (
+			<div className="h-screen w-full flex items-center justify-center bg-[#F5F7FA] p-5">
+				<div className="max-w-md w-full rounded-2xl bg-white border border-[#E8ECF1] p-8 text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+					<div className="w-16 h-16 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-5">
+						<AlertCircle size={32} />
+					</div>
+					<h1 className="text-xl font-bold text-[#0A1628] mb-2">
+						Account Suspended
+					</h1>
+					<p className="text-sm text-[#5A6B82] mb-8">
+						Your restaurant account is currently inactive. Please contact support.
+					</p>
+
+					<form onSubmit={handleSupportSubmit} className="space-y-4 text-left">
+						<div>
+							<label className="text-xs font-semibold text-[#5A6B82] mb-1.5 block">Subject</label>
+							<input
+								required
+								value={supportSubject}
+								onChange={(e) => setSupportSubject(e.target.value)}
+								className="w-full py-2 px-3 rounded-xl border border-[#E8ECF1] bg-[#F5F7FA] text-sm focus:border-[#3282B8] focus:bg-white focus:outline-none transition-colors"
+								placeholder="E.g., Account reactivation"
+								disabled={supportSubmitting}
+							/>
+						</div>
+						<div>
+							<label className="text-xs font-semibold text-[#5A6B82] mb-1.5 block">Message</label>
+							<textarea
+								required
+								value={supportMessage}
+								onChange={(e) => setSupportMessage(e.target.value)}
+								className="w-full py-2 px-3 rounded-xl border border-[#E8ECF1] bg-[#F5F7FA] text-sm focus:border-[#3282B8] focus:bg-white focus:outline-none min-h-[100px] resize-none transition-colors"
+								placeholder="How can we help?"
+								disabled={supportSubmitting}
+							/>
+						</div>
+						<button
+							type="submit"
+							disabled={supportSubmitting}
+							className="w-full py-2.5 rounded-xl bg-[#0A1628] text-white text-sm font-semibold disabled:opacity-70 transition-colors"
+						>
+							{supportSubmitting ? "Submitting..." : "Submit Ticket"}
+						</button>
+					</form>
+
+					<button
+						onClick={handleLogout}
+						className="mt-4 w-full py-2 text-sm font-medium text-[#7B8BA3] hover:text-[#0A1628] transition-colors"
+					>
+						Sign out
+					</button>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div
@@ -208,19 +302,12 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 				<aside className="hidden lg:flex fixed top-0 bottom-0 start-0 z-40 flex-col w-[260px] bg-white border-r border-[#E8ECF1] shrink-0 overflow-y-auto">
 					{/* Logo */}
 					<div className="px-7 pt-7 pb-6">
-						<Link href={basePath} className="flex items-center gap-2.5">
-							<div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0F4C75] to-[#3282B8] flex items-center justify-center shadow-[0_2px_8px_rgba(15,76,117,0.2)]">
-								<span className="text-white text-sm font-bold">T</span>
-							</div>
-							<div>
-								<span className="text-lg font-bold text-[#0A1628] tracking-tight block leading-none">
-									Tawla
-								</span>
-								<span className="text-[10px] text-[#7B8BA3] font-medium tracking-wider uppercase">
-									Dashboard
-								</span>
-							</div>
-						</Link>
+						<div className="flex flex-col gap-1 items-start">
+							<LogoBrand variant="primary" href={basePath} />
+							<span className="text-[10px] text-[#7B8BA3] font-medium tracking-wider uppercase pl-1">
+								Dashboard
+							</span>
+						</div>
 					</div>
 
 					{/* Navigation */}
@@ -288,7 +375,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 									</span>
 								</div>
 								<p className="text-[11px] text-[#5A6B82] font-medium truncate mb-3">
-									tawla.app/{slug}
+									tawla.link/{slug}
 								</p>
 								<div className="flex gap-2">
 									<button
@@ -351,6 +438,26 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 
 							{/* Right actions */}
 							<div className="flex items-center gap-3 relative">
+								{/* Trial Badge */}
+								{subscriptionStatus === "trialing" && trialEndsAt && (() => {
+									const daysLeft = Math.ceil(
+										(new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+									);
+									const isUrgent = daysLeft <= 3;
+									return (
+										<div
+											className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-colors ${
+												isUrgent
+													? "bg-red-50 border-red-200 text-red-600"
+													: "bg-amber-50 border-amber-200 text-amber-700"
+											}`}
+										>
+											<Sparkles size={14} />
+											Trial: {daysLeft > 0 ? `${daysLeft} day${daysLeft !== 1 ? "s" : ""} left` : "Expired"}
+										</div>
+									);
+								})()}
+
 								{/* Notification */}
 								<div className="relative">
 									<button
@@ -539,9 +646,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 									className="relative w-[280px] bg-white h-full shadow-2xl p-5 overflow-y-auto"
 								>
 									<div className="flex items-center justify-between mb-6">
-										<span className="text-lg font-bold text-[#0A1628]">
-											Tawla
-										</span>
+										<LogoBrand variant="primary" logoClassName="h-6" />
 										<button
 											onClick={() => setMobileOpen(false)}
 											className="p-1.5 text-[#5A6B82]"

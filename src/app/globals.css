@@ -42,7 +42,20 @@
 
   /* Fonts */
   --font-sans: var(--font-plus-jakarta-sans), system-ui, sans-serif;
-  --font-arabic: var(--font-tajawal), system-ui, sans-serif;
+  --font-arabic: var(--font-din-next), system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+  }
+  :root, html[dir="ltr"] {
+    --font-primary: var(--font-plus-jakarta-sans), system-ui, sans-serif;
+  }
+  html[dir="rtl"] {
+    --font-primary: var(--font-din-next), system-ui, sans-serif;
+  }
 }
 
 @theme inline {
@@ -81,8 +94,9 @@
   --shadow-up: 0px -10px 25px -5px rgba(0, 0, 0, 0.05);
 
   /* Fonts */
-  --font-sans: var(--font-plus-jakarta-sans), system-ui, sans-serif;
-  --font-arabic: var(--font-tajawal), system-ui, sans-serif;
+  --font-sans: var(--font-primary);
+  --font-heading: var(--font-primary);
+  --font-arabic: var(--font-din-next), system-ui, sans-serif;
   --font-display: var(--font-playfair-display), Georgia, 'Times New Roman', serif;
 
   /* Tawla Landing Page Colors */
@@ -112,10 +126,7 @@ body {
   overscroll-behavior-y: none;
 }
 
-/* RTL support */
-[dir="rtl"] body {
-  font-family: var(--font-arabic);
-}
+/* RTL support (Handled via dynamic CSS variables in @layer base) */
 
 /* Glassmorphism utilities */
 .glass {
@@ -237,4 +248,167 @@ body {
 
 .tawla-pulse {
   animation: tawla-pulse 3s ease-in-out infinite;
+}
+
+/* ═══ Blog Article Prose Styles ═══ */
+.blog-prose {
+  color: #3D4F6F;
+  line-height: 1.85;
+  font-size: 1.0625rem;
+}
+
+.blog-prose h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0A1628;
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+  line-height: 1.35;
+}
+
+.blog-prose h3 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #0A1628;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+}
+
+.blog-prose p {
+  margin-bottom: 1.25rem;
+}
+
+.blog-prose a {
+  color: #0F4C75;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 500;
+}
+
+.blog-prose a:hover {
+  color: #3282B8;
+}
+
+.blog-prose strong {
+  color: #0A1628;
+  font-weight: 700;
+}
+
+.blog-prose ul,
+.blog-prose ol {
+  padding-right: 1.5rem;
+  margin-bottom: 1.25rem;
+  list-style-position: inside;
+}
+
+.blog-prose ul {
+  list-style-type: disc;
+}
+
+.blog-prose ol {
+  list-style-type: decimal;
+}
+
+.blog-prose li {
+  margin-bottom: 0.5rem;
+}
+
+.blog-prose code {
+  background: #f5f5f4;
+  border-radius: 0.25rem;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.875em;
+  color: #0f4c75;
+  font-family: ui-monospace, monospace;
+}
+
+.blog-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.5rem;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1px solid #e7e5e4;
+  font-size: 0.925rem;
+}
+
+.blog-prose thead {
+  background: #f5f5f4;
+}
+
+.blog-prose th {
+  padding: 0.75rem 1rem;
+  text-align: right;
+  font-weight: 600;
+  color: #44403c;
+  border-bottom: 1px solid #e7e5e4;
+}
+
+.blog-prose td {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid #f5f5f4;
+}
+
+.blog-prose tr:last-child td {
+  border-bottom: none;
+}
+
+.blog-prose tr:nth-child(even) {
+  background: #fafaf9;
+}
+
+/* ── Dark variant (used on dark-bg blog pages) ── */
+.blog-prose-dark {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.blog-prose-dark h2,
+.blog-prose-dark h3 {
+  color: #ffffff;
+}
+
+.blog-prose-dark p {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.blog-prose-dark a {
+  color: #BBE1FA;
+}
+
+.blog-prose-dark a:hover {
+  color: #ffffff;
+}
+
+.blog-prose-dark strong {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.blog-prose-dark li {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.blog-prose-dark code {
+  background: rgba(255, 255, 255, 0.06);
+  color: #BBE1FA;
+}
+
+.blog-prose-dark table {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.blog-prose-dark thead {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.blog-prose-dark th {
+  color: rgba(255, 255, 255, 0.7);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.blog-prose-dark td {
+  border-bottom-color: rgba(255, 255, 255, 0.05);
+}
+
+.blog-prose-dark tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.03);
 }

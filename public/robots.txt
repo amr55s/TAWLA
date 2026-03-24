@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+
+# Exclude sensitive and admin routes
+Disallow: /admin
+Disallow: /login
+Disallow: /register
+Disallow: /onboarding
+Disallow: /super-admin
+Disallow: /*/[slug]/admin
+Disallow: /*/[slug]/waiter
+Disallow: /*/[slug]/cashier
+
+# Sitemap
+Sitemap: https://tawla.link/sitemap.xml
