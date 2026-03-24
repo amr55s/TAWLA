@@ -541,20 +541,14 @@ function HeroSection() {
 					className="relative max-w-[960px] mx-auto"
 				>
 					<div className="relative rounded-2xl lg:rounded-3xl overflow-hidden border border-tawla-deep/8 shadow-[0_24px_80px_rgba(15,76,117,0.12)] bg-white">
-						{/* Replace this placeholder with your real dashboard screenshot */}
-						<div className="aspect-[16/9] bg-gradient-to-br from-[#F0F7FC] via-white to-[#E8F4FD] flex items-center justify-center">
-							<div className="text-center px-8">
-								<div className="w-16 h-16 rounded-2xl bg-tawla-deep/5 flex items-center justify-center mx-auto mb-4">
-									<LayoutDashboard className="w-8 h-8 text-tawla-deep/40" />
-								</div>
-								<p className="text-sm text-tawla-muted font-medium">
-									{lang === "ar" ? "لوحة التحكم الذكية — إدارة مطعمك في مكان واحد" : "Intelligent Dashboard — Manage your restaurant in one place"}
-								</p>
-								<p className="text-xs text-tawla-muted/60 mt-1">
-									{lang === "ar" ? "تحكم في القائمة، الطاولات، والمبيعات لحظياً" : "Control your menu, tables, and sales in real-time"}
-								</p>
-							</div>
-						</div>
+						<Image
+							src="/img/dashboard.png"
+							alt={t("hero.dashboard_alt")}
+							width={1920}
+							height={1080}
+							className="w-full h-auto object-cover"
+							priority
+						/>
 					</div>
 					{/* Glow under the card */}
 					<div className="absolute -bottom-8 inset-x-[10%] h-16 bg-tawla-deep/5 blur-[40px] rounded-full pointer-events-none" />
@@ -575,6 +569,7 @@ const journeySteps = [
 		textKey: "journey.step1_text",
 		bullets: ["journey.step1_b1", "journey.step1_b2", "journey.step1_b3"],
 		imgAltKey: "journey.step1_img_alt",
+		image: "/img/menu.png",
 		icon: BookOpen,
 		accent: "from-tawla-ice to-tawla-ice-light",
 		iconColor: "text-tawla-deep",
@@ -587,6 +582,7 @@ const journeySteps = [
 		textKey: "journey.step2_text",
 		bullets: ["journey.step2_b1", "journey.step2_b2", "journey.step2_b3"],
 		imgAltKey: "journey.step2_img_alt",
+		image: "/img/waiter.png",
 		icon: LayoutDashboard,
 		accent: "from-tawla-deep/10 to-tawla-sky/10",
 		iconColor: "text-tawla-sky",
@@ -599,6 +595,7 @@ const journeySteps = [
 		textKey: "journey.step3_text",
 		bullets: ["journey.step3_b1", "journey.step3_b2", "journey.step3_b3"],
 		imgAltKey: "journey.step3_img_alt",
+		image: "/img/casher.png",
 		icon: CreditCard,
 		accent: "from-tawla-sky/10 to-tawla-ice/30",
 		iconColor: "text-tawla-deep",
@@ -655,6 +652,7 @@ function JourneySection() {
 				<AnimatePresence mode="wait">
 					<motion.div
 						key={step.id}
+						layout
 						initial={{ opacity: 0, y: 20 }}
 						animate={{ opacity: 1, y: 0 }}
 						exit={{ opacity: 0, y: -20 }}
@@ -690,21 +688,33 @@ function JourneySection() {
 							</ul>
 						</div>
 
-						{/* Screenshot placeholder */}
+						{/* Screenshot — mobile phone frame or landscape desktop frame */}
 						<div className={`flex justify-center ${active === 1 ? "lg:order-1" : ""}`}>
-							<div className="w-full max-w-[480px] rounded-2xl overflow-hidden border border-tawla-deep/8 shadow-[0_16px_48px_rgba(15,76,117,0.08)] bg-white">
-								<div className={`aspect-[4/3] bg-gradient-to-br ${step.accent} flex items-center justify-center`}>
-									<div className="text-center px-6">
-										<Icon className="w-10 h-10 text-tawla-deep/30 mx-auto mb-3" />
-										<p className="text-sm text-tawla-muted font-medium">
-											{t(step.titleKey)}
-										</p>
-										<p className="text-[11px] text-tawla-muted/50 mt-1">
-											{lang === "ar" ? "تجربة مستخدم سلسة وأنيقة" : "Seamless and elegant user experience"}
-										</p>
-									</div>
+							{(active === 0 || active === 1) ? (
+								/* Portrait mobile phone mockup */
+								<div className="relative max-w-[280px] sm:max-w-[320px] w-full aspect-[9/19.5] mx-auto rounded-[2.5rem] border-[8px] border-white shadow-2xl overflow-hidden">
+									<Image
+										src={step.image}
+										alt={t(step.imgAltKey)}
+										fill
+										priority
+										sizes="(max-width: 640px) 100vw, 320px"
+										className="object-cover object-top"
+									/>
 								</div>
-							</div>
+							) : (
+								/* Landscape desktop / cashier POS frame */
+								<div className="relative w-full aspect-video rounded-xl border-4 border-white shadow-xl overflow-hidden">
+									<Image
+										src={step.image}
+										alt={t(step.imgAltKey)}
+										fill
+										priority
+										sizes="(max-width: 1024px) 100vw, 500px"
+										className="object-cover object-top"
+									/>
+								</div>
+							)}
 						</div>
 					</motion.div>
 				</AnimatePresence>
