@@ -77,6 +77,70 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // ── STAFF ROUTE PROTECTION (Cookie-based) ──
+  const isStaffPath =
+    pathname.includes('/waiter') ||
+    pathname.includes('/cashier') ||
+    pathname.includes('/admin');
+  const isSuperAdminPath = pathname.startsWith('/super-admin');
+
+  if (isStaffPath && !isSuperAdminPath) {
+    const slug = pathname.split('/')[1];
+    const staffCookie = request.cookies.get('tawla_staff_session')?.value;
+
+    if (!staffCookie) {
+      if (pathname.includes('/admin')) {
+        return NextResponse.redirect(new URL('/login', request.url));
+      }
+      return NextResponse.redirect(new URL(`/${slug}/login`, request.url));
+    }
+
+    try {
+      const parsedCookie = JSON.parse(staffCookie);
+      
+      // Basic structure validation
+      if (!parsedCookie || typeof parsedCookie !== 'object' || !parsedCookie.slug || !parsedCookie.role) {
+        console.error('Invalid staff session cookie structure');
+        if (pathname.includes('/admin')) {
+          return NextResponse.redirect(new URL('/login', request.url));
+        }
+        return NextResponse.redirect(new URL(`/${slug}/login`, request.url));
+      }
+
+      // Tenant Validation (Cross-tenant breach protection)
+      if (parsedCookie.slug !== slug) {
+        console.error('Cross-tenant access attempt blocked');
+        if (pathname.includes('/admin')) {
+          return NextResponse.redirect(new URL('/login', request.url));
+        }
+        return NextResponse.redirect(new URL(`/${slug}/login`, request.url));
+      }
+
+      // Role Validation
+      const role = parsedCookie.role;
+      
+      // Owners have absolute access to any staff/admin route within their tenant
+      if (role === 'owner') {
+        return supabaseResponse;
+      }
+
+      if (pathname.includes('/admin') && role !== 'admin' && role !== 'owner') {
+        return NextResponse.redirect(new URL('/login', request.url));
+      }
+      
+      // Allow admins to access waiter/cashier routes as well
+      if (pathname.includes('/waiter') && role !== 'waiter' && role !== 'admin') {
+        return NextResponse.redirect(new URL(`/${slug}/login`, request.url));
+      }
+
+      if (pathname.includes('/cashier') && role !== 'cashier' && role !== 'admin') {
+        return NextResponse.redirect(new URL(`/${slug}/login`, request.url));
+      }
+    } catch (e) {
+      return NextResponse.redirect(new URL(`/${slug}/login`, request.url));
+    }
+  }
+
   // ── Authenticated users visiting auth/public routes → redirect to /{slug}/admin ──
   if (user && (isAuthRoute(pathname) || isPublicRedirectRoute(pathname))) {
     // Resolve slug for redirect
@@ -144,5 +208,6 @@ export const config = {
     '/:slug/admin/:path*',
     '/:slug/cashier/:path*',
     '/:slug/waiter/:path*',
+    '/:slug/kds',
   ],
 };

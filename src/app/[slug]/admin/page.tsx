@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, DollarSign, ShoppingBag, Utensils } from "lucide-react";
+import { Clock, DollarSign, ExternalLink, ShoppingBag, Utensils } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRestaurant } from "@/lib/contexts/RestaurantContext";
 import { createClient } from "@/lib/supabase/client";
@@ -9,6 +9,7 @@ import { BarChartCard, type BarChartData } from "@/components/admin/dashboard/Ba
 import { DonutChartCard, type DonutSegment } from "@/components/admin/dashboard/DonutChartCard";
 import { RecentOrdersCard, type RecentOrder } from "@/components/admin/dashboard/RecentOrdersCard";
 import { StaffOnDutyCard, type StaffMember } from "@/components/admin/dashboard/StaffOnDutyCard";
+import { getAveragePrepTime, getKitchenPerformance } from "@/app/actions/analytics.actions";
 
 const supabase = createClient();
 
@@ -39,6 +40,11 @@ export default function AdminDashboardPage() {
 		monthly_revenue: [],
 		recent_orders: [],
 	});
+	const [avgPrepTime, setAvgPrepTime] = useState<number | null>(null);
+	const [kitchenPerf, setKitchenPerf] = useState<{
+		morning?: number;
+		evening?: number;
+	}>({});
 
 	useEffect(() => setMounted(true), []);
 
@@ -58,6 +64,15 @@ export default function AdminDashboardPage() {
 					console.error("Original Error Object:", error);
 				} else if (data) {
 					setMetrics(data as unknown as DashboardMetrics);
+					// Also fetch prep time
+					if (restaurantId) {
+						const { averageMinutes, morningAverageMinutes, eveningAverageMinutes } = await getKitchenPerformance(restaurantId);
+						setAvgPrepTime(averageMinutes);
+						setKitchenPerf({
+							morning: morningAverageMinutes,
+							evening: eveningAverageMinutes,
+						});
+					}
 				}
 			} catch (err) {
 				console.error("Dashboard fetch error:", err);
@@ -175,10 +190,22 @@ export default function AdminDashboardPage() {
 							: "Today"}
 					</p>
 				</div>
+				<div className="flex items-center gap-3">
+					<a
+						href={`/${slug}/kds`}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#E8ECF1] rounded-xl text-sm font-bold text-[#0A1628] hover:bg-[#F5F7FA] hover:border-[#D1D9E2] transition-all shadow-[0_2px_8px_rgba(0,0,0,0.02)] active:scale-95 group"
+					>
+						<span className="text-lg group-hover:scale-110 transition-transform">👨‍🍳</span>
+						Open Kitchen Display (KDS)
+						<ExternalLink size={14} className="text-[#94A3B8] group-hover:text-[#0F4C75] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+					</a>
+				</div>
 			</div>
 
 			{/* Stats Row */}
-			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
 				<StatCard
 					loading={ctxLoading || loading}
 					title="Today's Revenue"
@@ -199,6 +226,21 @@ export default function AdminDashboardPage() {
 					value={`${metrics.active_tables || 0} / ${metrics.total_tables || 20}`}
 					icon={Utensils}
 					iconBg="bg-amber-50 text-amber-600"
+				/>
+				<StatCard
+					loading={ctxLoading || loading || avgPrepTime === null}
+					title="Overall Kitchen Speed"
+					value={`⏱️ ${avgPrepTime || 0} mins`}
+					change={
+						kitchenPerf.morning && kitchenPerf.evening 
+							? `AM: ${kitchenPerf.morning}m | PM: ${kitchenPerf.evening}m` 
+							: undefined
+					}
+					trend={
+						(kitchenPerf.morning || 0) < (kitchenPerf.evening || 0) ? "up" : "down"
+					}
+					icon={Clock}
+					iconBg="bg-rose-50 text-rose-600"
 				/>
 			</div>
 

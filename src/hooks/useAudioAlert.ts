@@ -1,41 +1,42 @@
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 
+/**
+ * Staff notification chime. Safe if `/notification.mp3` is missing, corrupt,
+ * or the browser blocks playback — never throws into React.
+ */
 export function useAudioAlert() {
 	const [audioEnabled, setAudioEnabled] = useState(false);
 
 	const playNotificationSound = useCallback(() => {
 		if (!audioEnabled) return;
 		try {
-			const AudioContextClass =
-				window.AudioContext || (window as any).webkitAudioContext;
-			if (!AudioContextClass) return;
-			const ctx = new AudioContextClass();
+			const windowAudioContext = window.AudioContext || (window as any).webkitAudioContext;
+			if (!windowAudioContext) return;
+			const ctx = new windowAudioContext();
 			const osc = ctx.createOscillator();
 			const gain = ctx.createGain();
 			osc.connect(gain);
 			gain.connect(ctx.destination);
 			osc.type = "sine";
-			// 880Hz is a classic pleasant notification chime frequency (A5)
-			osc.frequency.setValueAtTime(880, ctx.currentTime);
-			gain.gain.setValueAtTime(0.2, ctx.currentTime);
+			osc.frequency.setValueAtTime(880, ctx.currentTime); // A5 note
+			gain.gain.setValueAtTime(0.1, ctx.currentTime); // Gentle volume
 			osc.start();
-			osc.stop(ctx.currentTime + 0.3);
-		} catch (e) {
-			console.error("Audio play failed", e);
+			osc.stop(ctx.currentTime + 0.15); // Short ding
+		} catch (err) {
+			console.warn("Audio Context blocked:", err);
 		}
 	}, [audioEnabled]);
 
 	const enableAudio = useCallback(() => {
 		setAudioEnabled(true);
 		try {
-			const AudioContextClass =
-				window.AudioContext || (window as any).webkitAudioContext;
-			if (AudioContextClass) {
-				const ctx = new AudioContextClass();
-				ctx.resume();
-			}
-		} catch (e) {
-			console.error("Audio Context initialization failed", e);
+			const windowAudioContext = window.AudioContext || (window as any).webkitAudioContext;
+			if (!windowAudioContext) return;
+			const ctx = new windowAudioContext();
+			// Just resume/start context on user gesture
+			void ctx.resume();
+		} catch (err) {
+			console.warn("Audio Context init blocked:", err);
 		}
 	}, []);
 

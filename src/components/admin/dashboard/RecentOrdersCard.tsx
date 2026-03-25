@@ -30,8 +30,8 @@ export function RecentOrdersCard({
 				return "bg-gray-50 text-[#5A6B82]";
 			case "completed":
 				return "bg-blue-50 text-[#3282B8]";
-			case "served":
-				return "bg-sky-50 text-sky-600";
+		case "delivered":
+			return "bg-sky-50 text-sky-600";
 			default:
 				return "bg-amber-50 text-amber-600";
 		}

@@ -18,6 +18,7 @@ import * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getRestaurantBySlugClient } from "@/lib/data/orders.client";
+import { markOrderAsDelivered } from "@/app/actions/orders.actions";
 import { createClient } from "@/lib/supabase/client";
 import type { OrderWithItems, Restaurant } from "@/types/database";
 import { useAudioAlert } from "@/hooks/useAudioAlert";
@@ -42,15 +43,12 @@ interface WaiterActiveCall {
 
 const supabase = createClient();
 const WAITER_ACTIVE_ORDER_STATUSES = [
-	"confirmed",
-	"preparing",
-	"served",
-	"confirmed_by_waiter",
 	"in_kitchen",
 	"ready",
+	"delivered",
 ] as const;
 
-type TableStatus = "empty" | "calling" | "pending" | "active";
+type TableStatus = "empty" | "calling" | "pending" | "in_kitchen" | "food_ready" | "dining";
 type StatusFilter = "all" | TableStatus;
 
 interface TableWithStatus {
@@ -71,10 +69,11 @@ export default function WaiterDashboardPage({
 	const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
 	const [activeOrders, setActiveOrders] = useState<WaiterActiveOrder[]>([]);
 	const [activeCalls, setActiveCalls] = useState<WaiterActiveCall[]>([]);
-    const [physicalTables, setPhysicalTables] = useState<{id: string, table_number: number}[]>([]);
+	const [physicalTables, setPhysicalTables] = useState<{ id: string, table_number: number }[]>([]);
 	const [tableMap, setTableMap] = useState<Record<string, number>>({});
 	const [isLoading, setIsLoading] = useState(true);
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+	const [monthlyOrdersCount, setMonthlyOrdersCount] = useState(0);
 
 	// Add Silent Smart Presence Tracker
 	const staffId =
@@ -93,6 +92,7 @@ export default function WaiterDashboardPage({
 	const [isConfirming, setIsConfirming] = useState(false);
 	const [isClearing, setIsClearing] = useState(false);
 	const [isResolving, setIsResolving] = useState(false);
+	const [isServing, setIsServing] = useState(false);
 
 	// Custom Engine Hooks
 	const { audioEnabled, enableAudio, playNotificationSound } = useAudioAlert();
@@ -115,6 +115,22 @@ export default function WaiterDashboardPage({
 
 			setRestaurant(restaurantData);
 
+			if (restaurantData.plan === "pro") {
+				const monthStart = new Date();
+				monthStart.setDate(1);
+				monthStart.setHours(0, 0, 0, 0);
+
+				const { count: orderCount } = await supabase
+					.from("orders")
+					.select("id", { count: "exact", head: true })
+					.eq("restaurant_id", restaurantData.id)
+					.gte("created_at", monthStart.toISOString());
+
+				setMonthlyOrdersCount(orderCount ?? 0);
+			} else {
+				setMonthlyOrdersCount(0);
+			}
+
 			let orders: any[] = [];
 			let calls: any[] = [];
 			const map: Record<string, number> = {};
@@ -124,12 +140,12 @@ export default function WaiterDashboardPage({
 					.from("tables")
 					.select("id, table_number")
 					.eq("restaurant_id", restaurantData.id);
-                if (tablesData) {
-                    setPhysicalTables(tablesData);
-                    tablesData.forEach((t) => {
-                        map[t.id] = t.table_number;
-                    });
-                }
+				if (tablesData) {
+					setPhysicalTables(tablesData);
+					tablesData.forEach((t) => {
+						map[t.id] = t.table_number;
+					});
+				}
 			} catch (e) {
 				logger.warn("Tables fetch soft fail", { error: e });
 			}
@@ -189,14 +205,18 @@ export default function WaiterDashboardPage({
 					["pending", ...WAITER_ACTIVE_ORDER_STATUSES].includes(o.status),
 			);
 
-			let callType: "assistance" | "bill" | undefined;
+		let callType: "assistance" | "bill" | undefined;
 			if (currentCalls.length > 0) {
 				status = "calling";
 				callType = currentCalls[0].type as "assistance" | "bill";
+			} else if (currentOrders.some((o: any) => o.status === "ready")) {
+				status = "food_ready";
+			} else if (currentOrders.some((o: any) => o.status === "in_kitchen")) {
+				status = "in_kitchen";
 			} else if (currentOrders.some((o: any) => o.status === "pending")) {
 				status = "pending";
 			} else if (currentOrders.length > 0) {
-				status = "active";
+				status = "dining";
 			}
 
 			dynamicTables.push({
@@ -220,7 +240,23 @@ export default function WaiterDashboardPage({
 
 	useRestaurantRealtime(restaurant?.id, {
 		onOrderChange: React.useCallback((payload: any) => {
+			if (
+				restaurant?.plan === "pro" &&
+				payload.eventType === "INSERT" &&
+				payload.new?.created_at
+			) {
+				const createdAt = new Date(payload.new.created_at);
+				const monthStart = new Date();
+				monthStart.setDate(1);
+				monthStart.setHours(0, 0, 0, 0);
+				if (createdAt >= monthStart) {
+					setMonthlyOrdersCount((prev) => prev + 1);
+				}
+			}
 			if (payload.eventType === "INSERT") playNotificationSound();
+			if (payload.eventType === "UPDATE" && payload.new?.status === "ready" && payload.old?.status !== "ready") { 
+				playNotificationSound(); 
+			}
 			setActiveOrders((prev) => {
 				if (payload.eventType === "INSERT") return [payload.new as WaiterActiveOrder, ...prev];
 				if (payload.eventType === "UPDATE") {
@@ -232,8 +268,8 @@ export default function WaiterDashboardPage({
 				if (payload.eventType === "DELETE") return prev.filter((o) => o.id !== payload.old.id);
 				return prev;
 			});
-		}, [playNotificationSound]),
-		
+		}, [playNotificationSound, restaurant?.plan]),
+
 		onCallChange: React.useCallback((payload: any) => {
 			if (payload.eventType === "INSERT") playNotificationSound();
 			setActiveCalls((prev) => {
@@ -248,7 +284,7 @@ export default function WaiterDashboardPage({
 				return prev;
 			});
 		}, [playNotificationSound]),
-		
+
 		onRestaurantChange: React.useCallback((payload: any) => {
 			setRestaurant((prev) => ({ ...(prev as any), ...(payload.new as any) }));
 		}, [])
@@ -289,8 +325,9 @@ export default function WaiterDashboardPage({
 
 			if (error) throw error;
 			setTableOrders((ordersData as unknown as OrderWithItems[]) || []);
-		} catch (e) {
-			console.error("Failed to fetch table orders:", e);
+		} catch (e: any) {
+			console.error("Failed to fetch table orders:", e.message || e);
+			toast.error("Could not load table details.");
 		} finally {
 			setIsLoadingOrder(false);
 		}
@@ -314,7 +351,7 @@ export default function WaiterDashboardPage({
 		try {
 			const { error } = await supabase
 				.from("orders")
-				.update({ status: "confirmed" })
+				.update({ status: "in_kitchen" })
 				.in("id", pendingOrderIds)
 				.eq("restaurant_id", restaurant.id);
 
@@ -384,6 +421,24 @@ export default function WaiterDashboardPage({
 		}
 	};
 
+	const handleMarkServed = async () => {
+		setIsServing(true);
+		try {
+			const readyOrders = tableOrders.filter((o) => o.status === "ready");
+			for (const order of readyOrders) {
+				await markOrderAsDelivered(order.id);
+			}
+		setTableOrders((prev) =>
+			prev.map((o) => (o.status === "ready" ? { ...o, status: "delivered" } : o))
+		);
+			toast.success("Marked as served!");
+		} catch (e) {
+			toast.error("Failed to mark as served");
+		} finally {
+			setIsServing(false);
+		}
+	};
+
 	const handleResolveCall = async () => {
 		if (!selectedTable || !restaurant?.id) return;
 		setIsResolving(true);
@@ -418,7 +473,7 @@ export default function WaiterDashboardPage({
 
 	// -- Status helpers --
 	const statusCounts = React.useMemo(() => {
-		const counts = { calling: 0, pending: 0, active: 0, empty: 0 };
+		const counts = { calling: 0, pending: 0, in_kitchen: 0, food_ready: 0, dining: 0, empty: 0 };
 		tables.forEach((t) => {
 			counts[t.status]++;
 		});
@@ -431,7 +486,11 @@ export default function WaiterDashboardPage({
 				return "bg-red-50 border-red-400 text-red-700 shadow-[0_0_20px_rgba(248,113,113,0.4)]";
 			case "pending":
 				return "bg-[#E8F4FD] border-[#3282B8] text-[#0F4C75]";
-			case "active":
+			case "in_kitchen":
+				return "bg-amber-50 border-amber-500 text-amber-900 ring-1 ring-amber-300";
+			case "food_ready":
+				return "bg-emerald-50 border-emerald-500 text-emerald-900 shadow-[0_0_0_3px_rgba(16,185,129,0.45)] ring-2 ring-emerald-400 animate-pulse";
+			case "dining":
 				return "bg-[#F0F9FF] border-[#0F4C75] text-[#0F4C75]";
 			default:
 				return "bg-[#F8FAFC] border-[#E2E8F0] text-[#94A3B8]";
@@ -452,8 +511,12 @@ export default function WaiterDashboardPage({
 				);
 			case "pending":
 				return "New Order";
-			case "active":
-				return "Active";
+			case "in_kitchen":
+				return "In Kitchen";
+			case "food_ready":
+				return "🔔 Food Ready!";
+			case "dining":
+				return "Seated";
 			default:
 				return "Empty";
 		}
@@ -522,13 +585,33 @@ export default function WaiterDashboardPage({
 				color: "bg-[#3282B8] text-white",
 			},
 			{
-				value: "active",
+				value: "in_kitchen",
 				label: (
 					<span className="flex items-center gap-1">
-						<PlayCircle size={14} /> Active
+						<UtensilsCrossed size={14} /> In Kitchen
 					</span>
 				),
-				count: statusCounts.active,
+				count: statusCounts.in_kitchen,
+				color: "bg-amber-500 text-white",
+			},
+			{
+				value: "food_ready",
+				label: (
+					<span className="flex items-center gap-1">
+						<Bell size={14} /> Ready
+					</span>
+				),
+				count: statusCounts.food_ready,
+				color: "bg-emerald-500 text-white",
+			},
+			{
+				value: "dining",
+				label: (
+					<span className="flex items-center gap-1">
+						<PlayCircle size={14} /> Seated
+					</span>
+				),
+				count: statusCounts.dining,
 				color: "bg-teal-500 text-white",
 			},
 		];
@@ -586,6 +669,22 @@ export default function WaiterDashboardPage({
 				)}
 			</AnimatePresence>
 
+			{restaurant?.plan === "pro" &&
+				restaurant.max_orders_monthly != null &&
+				monthlyOrdersCount > restaurant.max_orders_monthly && (
+					<div className="border-b border-[#F9D7AE] bg-[#FFF4E8] px-5 py-3">
+						<div className="flex items-center gap-2 text-sm font-semibold text-[#A15C17]">
+							<CircleAlert size={16} />
+							High Volume Detected
+						</div>
+						<p className="mt-1 text-xs leading-5 text-[#8A5A26]">
+							You&apos;ve processed {monthlyOrdersCount} orders this month on Pro.
+							Enterprise is recommended after {restaurant.max_orders_monthly} orders
+							for busier operations.
+						</p>
+					</div>
+				)}
+
 			{/* ── Status Filter Pills ── */}
 			<div className="px-4 pt-4 pb-2 overflow-x-auto">
 				<div className="flex gap-2 min-w-max">
@@ -594,15 +693,15 @@ export default function WaiterDashboardPage({
 							key={opt.value}
 							onClick={() => setStatusFilter(opt.value)}
 							className={`px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${statusFilter === opt.value
-									? opt.color + " shadow-md"
-									: "bg-white text-[#64748B] border border-[#E2E8F0] hover:border-[#CBD5E1]"
+								? opt.color + " shadow-md"
+								: "bg-white text-[#64748B] border border-[#E2E8F0] hover:border-[#CBD5E1]"
 								}`}
 						>
 							{opt.label}
 							<span
 								className={`min-w-[20px] h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${statusFilter === opt.value
-										? "bg-white/25 text-white"
-										: "bg-[#F1F5F9] text-[#64748B]"
+									? "bg-white/25 text-white"
+									: "bg-[#F1F5F9] text-[#64748B]"
 									}`}
 							>
 								{opt.count}
@@ -623,7 +722,7 @@ export default function WaiterDashboardPage({
 					<div className="grid grid-cols-3 gap-3">
 						{filteredTables.map((table, index) => (
 							<motion.button
-								key={table.id}
+								key={`table-${table.table_number}`}
 								initial={{ opacity: 0, scale: 0.9 }}
 								animate={{ opacity: 1, scale: 1 }}
 								transition={{ delay: index * 0.03 }}
@@ -656,7 +755,7 @@ export default function WaiterDashboardPage({
 			<AnimatePresence>
 				{selectedTable && (
 					<motion.div
-						key={`backdrop-${selectedTable.id}`}
+						key={`backdrop-${selectedTable?.table_number}`}
 						initial={{ opacity: 0 }}
 						animate={{ opacity: 1 }}
 						exit={{ opacity: 0 }}
@@ -669,7 +768,7 @@ export default function WaiterDashboardPage({
 			<AnimatePresence>
 				{selectedTable && (
 					<motion.div
-						key={`drawer-${selectedTable.id}`}
+						key={`drawer-${selectedTable?.table_number}`}
 						initial={{ y: "100%" }}
 						animate={{ y: 0 }}
 						exit={{ y: "100%" }}
@@ -754,54 +853,54 @@ export default function WaiterDashboardPage({
 									)
 								) : (
 									<>
-									<div className="space-y-3">
-										{(tableOrders[0]?.items || []).map((item: any) => (
-											<div
-												key={item.id}
-												className="flex gap-4 p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl"
-											>
-												<div className="w-12 h-12 bg-[#E8F4FD] rounded-xl flex items-center justify-center font-bold text-[#0F4C75] text-lg flex-shrink-0">
-													x{item.quantity}
-												</div>
-												<div className="flex-1 pt-1">
-													<p className="font-bold text-[#0A1628] leading-tight">
-														{item.menu_item?.name_en || "Unknown Item"}
-													</p>
-													{item.special_requests && (
-														<p className="text-xs text-red-500 font-medium mt-1">
-															Note: {item.special_requests}
+										<div className="space-y-3">
+											{(tableOrders[0]?.items || []).map((item: any) => (
+												<div
+													key={`item-${item.id}`}
+													className="flex gap-4 p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl"
+												>
+													<div className="w-12 h-12 bg-[#E8F4FD] rounded-xl flex items-center justify-center font-bold text-[#0F4C75] text-lg flex-shrink-0">
+														x{item.quantity}
+													</div>
+													<div className="flex-1 pt-1">
+														<p className="font-bold text-[#0A1628] leading-tight">
+															{item.menu_item?.name_en || "Unknown Item"}
 														</p>
-													)}
+														{item.special_requests && (
+															<p className="text-xs text-red-500 font-medium mt-1">
+																Note: {item.special_requests}
+															</p>
+														)}
+													</div>
 												</div>
-											</div>
-										))}
-									</div>
-
-									{tableOrders[0]?.special_requests && (
-										<div className="bg-amber-50 border border-amber-200 p-4 rounded-xl">
-											<p className="text-xs font-bold text-amber-800 uppercase mb-1">
-												Table Note
-											</p>
-											<p className="text-sm text-amber-900">
-												{tableOrders[0]?.special_requests}
-											</p>
+											))}
 										</div>
-									)}
 
-									<div className="flex justify-between items-center py-4 px-2 border-t-2 border-dashed border-[#E2E8F0]">
-										<span className="font-bold text-[#64748B]">
-											Total Value
-										</span>
-										<span
-											className="text-2xl font-black text-[#0F4C75]"
-											style={{ direction: "ltr" }}
-										>
-											{tableOrders.reduce((s, o) => s + Number(o.total_amount), 0).toFixed(3)} KD
-										</span>
-									</div>
-								</>
-							)
-						)}
+										{tableOrders[0]?.special_requests && (
+											<div className="bg-amber-50 border border-amber-200 p-4 rounded-xl">
+												<p className="text-xs font-bold text-amber-800 uppercase mb-1">
+													Table Note
+												</p>
+												<p className="text-sm text-amber-900">
+													{tableOrders[0]?.special_requests}
+												</p>
+											</div>
+										)}
+
+										<div className="flex justify-between items-center py-4 px-2 border-t-2 border-dashed border-[#E2E8F0]">
+											<span className="font-bold text-[#64748B]">
+												Total Value
+											</span>
+											<span
+												className="text-2xl font-black text-[#0F4C75]"
+												style={{ direction: "ltr" }}
+											>
+												{tableOrders.reduce((s, o) => s + Number(o.total_amount), 0).toFixed(3)} KD
+											</span>
+										</div>
+									</>
+								)
+							)}
 						</div>
 
 						{/* ── Action Footer ── */}
@@ -881,7 +980,24 @@ export default function WaiterDashboardPage({
 								</button>
 							</div>
 						)}
-						{tableOrders.length > 0 && selectedTable.status === "active" && (
+						{tableOrders.some((o) => o.status === "ready") && selectedTable.status === "food_ready" && (
+							<div
+								className="px-6 py-5 bg-white border-t border-[#F1F5F9] flex flex-col gap-3"
+								style={{
+									paddingBottom: "max(20px, env(safe-area-inset-bottom))",
+								}}
+							>
+								<button
+									onClick={handleMarkServed}
+									disabled={isServing}
+									className="w-full h-14 bg-emerald-600 rounded-2xl text-white font-bold text-lg flex justify-center items-center gap-2 transition-transform active:scale-95 hover:bg-emerald-700"
+								>
+									{isServing ? "Updating..." : "Mark as Served (Pickup Food)"}
+									<CheckCircle size={20} />
+								</button>
+							</div>
+						)}
+						{tableOrders.length > 0 && ["in_kitchen", "dining", "food_ready"].includes(selectedTable.status) && (
 							<div
 								className="px-6 py-5 bg-white border-t border-[#F1F5F9]"
 								style={{

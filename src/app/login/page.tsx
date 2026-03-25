@@ -9,6 +9,7 @@ import { useState, Suspense } from "react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { LogoBrand } from "@/components/ui/LogoBrand";
+import { setStaffSession } from "@/app/actions/staff-auth";
 
 function LoginInner() {
 	const router = useRouter();
@@ -98,12 +99,19 @@ function LoginInner() {
 		if (role === "admin" || !role) {
 			const { data: restaurants } = await supabase
 				.from("restaurants")
-				.select("slug")
+				.select("id, slug")
 				.eq("owner_id", user.id)
 				.limit(1);
 			const restaurant = restaurants?.[0];
-
+			
 			if (restaurant?.slug) {
+				// Set unified session cookie for Edge Middleware
+				await setStaffSession({
+					role: 'owner',
+					restaurant_id: restaurant.id,
+					slug: restaurant.slug
+				});
+				
 				router.push(`/${restaurant.slug}/admin`);
 				return;
 			}
@@ -118,12 +126,19 @@ function LoginInner() {
 		if ((role === "cashier" || role === "waiter") && restaurantId) {
 			const { data: restaurants } = await supabase
 				.from("restaurants")
-				.select("slug")
+				.select("id, slug")
 				.eq("id", restaurantId)
 				.limit(1);
 			const restaurant = restaurants?.[0];
 
 			if (restaurant?.slug) {
+				// Set unified session cookie for staff with Supabase accounts
+				await setStaffSession({
+					role: role as 'waiter' | 'cashier',
+					restaurant_id: restaurant.id,
+					slug: restaurant.slug
+				});
+				
 				router.push(`/${restaurant.slug}/${role}`);
 				return;
 			}

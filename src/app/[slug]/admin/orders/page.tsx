@@ -8,10 +8,9 @@ import { createClient } from "@/lib/supabase/client";
 
 type OrderStatus =
 	| "pending"
-	| "confirmed"
-	| "preparing"
+	| "in_kitchen"
 	| "ready"
-	| "served"
+	| "delivered"
 	| "paid"
 	| "cancelled";
 
@@ -114,9 +113,9 @@ export default function AdminOrdersPage() {
 	const filters = [
 		"all",
 		"pending",
-		"preparing",
+		"in_kitchen",
 		"ready",
-		"served",
+		"delivered",
 		"paid",
 		"cancelled",
 	];

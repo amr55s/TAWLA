@@ -1,5 +1,5 @@
 "use client";
-
+import { Building2 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
 	AlertCircle,
@@ -32,12 +32,22 @@ import {
 } from "@/lib/contexts/RestaurantContext";
 import { createClient } from "@/lib/supabase/client";
 import { LogoBrand } from "@/components/ui/LogoBrand";
+import { clearStaffSession } from "@/app/actions/staff-auth";
+import { checkSubscriptionStatus } from "@/app/actions/subscription";
 
 function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 	const pathname = usePathname();
 	const params = useParams();
 	const urlSlug = params.slug as string;
-	const { slug: contextSlug, restaurantId, subscriptionStatus, trialEndsAt, isActive: isRestaurantActive } = useRestaurant();
+	const {
+		slug: contextSlug,
+		restaurantId,
+		plan,
+		subscriptionStatus,
+		trialEndsAt,
+		isActive: isRestaurantActive,
+		isMaster,
+	} = useRestaurant();
 	const slug = urlSlug || contextSlug || "";
 	const basePath = `/${slug}/admin`;
 
@@ -64,7 +74,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 	const handlePasswordSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setPasswordError("");
-		
+
 		if (newPassword.length < 6) {
 			setPasswordError("Password must be at least 6 characters long.");
 			return;
@@ -76,7 +86,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 
 		setPasswordLoading(true);
 		const supabase = createClient();
-		
+
 		const { error } = await supabase.auth.updateUser({
 			password: newPassword
 		});
@@ -113,7 +123,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 				`)
 				.eq("restaurant_id", restaurantId)
 				.gte("created_at", yesterday)
-				.in("status", ["pending", "confirmed"])
+				.in("status", ["pending", "in_kitchen"])
 				.order("created_at", { ascending: false })
 				.limit(5);
 			setRecentNotifOrders(data || []);
@@ -133,9 +143,10 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 	};
 
 	const handleLogout = async () => {
+		await clearStaffSession();
 		const supabase = createClient();
 		await supabase.auth.signOut();
-		router.push("/" + slug + "/login");
+		router.push("/login");
 	};
 
 	const handleClearNotifs = (e: React.MouseEvent) => {
@@ -212,6 +223,47 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 	const [supportSubject, setSupportSubject] = useState("");
 	const [supportMessage, setSupportMessage] = useState("");
 	const [supportSubmitting, setSupportSubmitting] = useState(false);
+	const [branchMenuOpen, setBranchMenuOpen] = useState(false);
+	const [branches, setBranches] = useState<
+		Array<{ id: string; name: string; slug: string; parent_id: string | null }>
+	>([]);
+
+	useEffect(() => {
+		if (!restaurantId || plan !== "trial" || !trialEndsAt) return;
+		if (new Date(trialEndsAt).getTime() >= Date.now()) return;
+
+		let cancelled = false;
+
+		(async () => {
+			const status = await checkSubscriptionStatus(restaurantId);
+			if (!cancelled && status.ok && status.requiresPayment) {
+				router.replace(`/${slug}/subscribe?from=trial-expired`);
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [plan, restaurantId, router, slug, trialEndsAt]);
+
+	useEffect(() => {
+		if (!isMaster || !restaurantId) {
+			setBranches([]);
+			return;
+		}
+
+		const supabase = createClient();
+
+		(async () => {
+			const { data } = await supabase
+				.from("restaurants")
+				.select("id, name, slug, parent_id")
+				.or(`id.eq.${restaurantId},parent_id.eq.${restaurantId}`)
+				.order("created_at", { ascending: true });
+
+			setBranches((data as Array<{ id: string; name: string; slug: string; parent_id: string | null }>) || []);
+		})();
+	}, [isMaster, restaurantId]);
 
 	const handleSupportSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -312,6 +364,59 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 
 					{/* Navigation */}
 					<nav className="flex-1 px-4 space-y-1">
+						{isMaster && branches.length > 0 && (
+							<div className="mb-4 rounded-2xl border border-[#E8ECF1] bg-[#F8FAFC] p-3">
+								<button
+									type="button"
+									onClick={() => setBranchMenuOpen((prev) => !prev)}
+									className="flex w-full items-center justify-between gap-3 rounded-xl px-2 py-2 text-left"
+								>
+									<div className="flex items-center gap-2">
+										<div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0F4C75] text-white">
+											<Building2 size={16} />
+										</div>
+										<div>
+											<p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#94A3B8]">
+												Branch Switcher
+											</p>
+											<p className="text-sm font-bold text-[#0A1628]">
+												Master Account
+											</p>
+										</div>
+									</div>
+									<ChevronDown
+										size={16}
+										className={`text-[#94A3B8] transition-transform ${branchMenuOpen ? "rotate-180" : ""}`}
+									/>
+								</button>
+
+								{branchMenuOpen && (
+									<div className="mt-2 space-y-1">
+										<Link
+											href={`/${slug}/admin/analytics/all-branches`}
+											className="flex items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold text-[#0A1628] hover:bg-white"
+										>
+											<span>All Branches Analytics</span>
+											<BarChart3 size={14} className="text-[#94A3B8]" />
+										</Link>
+										{branches.map((branch) => (
+											<Link
+												key={branch.id}
+												href={`/${branch.slug}/admin`}
+												className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium hover:bg-white ${branch.slug === slug ? "bg-white text-[#0F4C75]" : "text-[#5A6B82]"
+													}`}
+											>
+												<span>{branch.parent_id ? branch.name : `${branch.name} HQ`}</span>
+												<span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B0B8C4]">
+													{branch.parent_id ? "Branch" : "Master"}
+												</span>
+											</Link>
+										))}
+									</div>
+								)}
+							</div>
+						)}
+
 						<p className="px-3 mb-2 text-[10px] font-semibold text-[#B0B8C4] uppercase tracking-widest">
 							Main Menu
 						</p>
@@ -439,18 +544,17 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 							{/* Right actions */}
 							<div className="flex items-center gap-3 relative">
 								{/* Trial Badge */}
-								{subscriptionStatus === "trialing" && trialEndsAt && (() => {
+								{plan === "trial" && trialEndsAt && (() => {
 									const daysLeft = Math.ceil(
 										(new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
 									);
 									const isUrgent = daysLeft <= 3;
 									return (
 										<div
-											className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-colors ${
-												isUrgent
-													? "bg-red-50 border-red-200 text-red-600"
-													: "bg-amber-50 border-amber-200 text-amber-700"
-											}`}
+											className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-colors ${isUrgent
+												? "bg-red-50 border-red-200 text-red-600"
+												: "bg-amber-50 border-amber-200 text-amber-700"
+												}`}
 										>
 											<Sparkles size={14} />
 											Trial: {daysLeft > 0 ? `${daysLeft} day${daysLeft !== 1 ? "s" : ""} left` : "Expired"}
@@ -503,7 +607,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 														const visibleNotifs = recentNotifOrders.filter(
 															(o) => !clearedAt || new Date(o.created_at) > clearedAt
 														);
-														
+
 														if (visibleNotifs.length === 0) {
 															return (
 																<div className="px-6 py-10 flex flex-col items-center justify-center text-center">
@@ -519,41 +623,41 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 														return (
 															<div className="flex flex-col">
 																{visibleNotifs.map((order) => {
-																const tableNum = order.tables?.table_number;
-																const itemCount = order.order_items?.length || 0;
-																const amount = Number(order.total_amount || 0).toFixed(2);
-																const statusText = order.status.replace(/_/g, " ");
+																	const tableNum = order.tables?.table_number;
+																	const itemCount = order.order_items?.length || 0;
+																	const amount = Number(order.total_amount || 0).toFixed(2);
+																	const statusText = order.status.replace(/_/g, " ");
 
-																return (
-																	<Link
-																		key={order.id}
-																		href={`/${slug}/admin/orders`}
-																		onClick={() => setNotifOpen(false)}
-																		className="flex items-start gap-3 px-4 py-3 hover:bg-[#F0F4F8] border-b border-[#E8ECF1] last:border-0 transition-colors group"
-																	>
-																		<div className="mt-1.5 w-2 h-2 rounded-full shrink-0 bg-[#0F4C75] shadow-[0_0_8px_rgba(15,76,117,0.4)]" />
-																		
-																		<div className="flex-1 min-w-0">
-																			<div className="flex items-center justify-between gap-2 mb-0.5">
-																				<span className="text-sm font-bold text-[#0A1628] truncate group-hover:text-[#0F4C75] transition-colors">
-																					Order #{order.order_number || order.id.slice(0, 4)} • {tableNum ? `Table ${tableNum}` : "Takeaway"}
-																				</span>
-																				<span className="text-[10px] font-medium text-[#94A3B8] shrink-0 whitespace-nowrap">
-																					{formatTimeAgo(order.created_at)}
-																				</span>
+																	return (
+																		<Link
+																			key={order.id}
+																			href={`/${slug}/admin/orders`}
+																			onClick={() => setNotifOpen(false)}
+																			className="flex items-start gap-3 px-4 py-3 hover:bg-[#F0F4F8] border-b border-[#E8ECF1] last:border-0 transition-colors group"
+																		>
+																			<div className="mt-1.5 w-2 h-2 rounded-full shrink-0 bg-[#0F4C75] shadow-[0_0_8px_rgba(15,76,117,0.4)]" />
+
+																			<div className="flex-1 min-w-0">
+																				<div className="flex items-center justify-between gap-2 mb-0.5">
+																					<span className="text-sm font-bold text-[#0A1628] truncate group-hover:text-[#0F4C75] transition-colors">
+																						Order #{order.order_number || order.id.slice(0, 4)} • {tableNum ? `Table ${tableNum}` : "Takeaway"}
+																					</span>
+																					<span className="text-[10px] font-medium text-[#94A3B8] shrink-0 whitespace-nowrap">
+																						{formatTimeAgo(order.created_at)}
+																					</span>
+																				</div>
+
+																				<div className="flex items-center gap-1.5 text-xs text-[#7B8BA3] truncate">
+																					<span className="font-semibold text-[#0F4C75]">${amount}</span>
+																					<span>•</span>
+																					<span>{itemCount} {itemCount === 1 ? 'item' : 'items'}</span>
+																					<span>•</span>
+																					<span className="capitalize truncate">{statusText}</span>
+																				</div>
 																			</div>
-																			
-																			<div className="flex items-center gap-1.5 text-xs text-[#7B8BA3] truncate">
-																				<span className="font-semibold text-[#0F4C75]">${amount}</span>
-																				<span>•</span>
-																				<span>{itemCount} {itemCount === 1 ? 'item' : 'items'}</span>
-																				<span>•</span>
-																				<span className="capitalize truncate">{statusText}</span>
-																			</div>
-																		</div>
-																	</Link>
-																);
-															})}
+																		</Link>
+																	);
+																})}
 															</div>
 														);
 													})()}
@@ -655,6 +759,31 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 										</button>
 									</div>
 									<nav className="space-y-1">
+										{isMaster && branches.length > 0 && (
+											<>
+												<Link
+													href={`/${slug}/admin/analytics/all-branches`}
+													onClick={() => setMobileOpen(false)}
+													className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium text-[#5A6B82] hover:bg-[#F0F4F8]"
+												>
+													<Building2 size={18} /> All Branches
+												</Link>
+												{branches.map((branch) => (
+													<Link
+														key={branch.id}
+														href={`/${branch.slug}/admin`}
+														onClick={() => setMobileOpen(false)}
+														className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all ${branch.slug === slug
+															? "bg-[#0F4C75] text-white"
+															: "text-[#5A6B82] hover:bg-[#F0F4F8]"
+															}`}
+													>
+														<Building2 size={18} />
+														{branch.parent_id ? branch.name : `${branch.name} HQ`}
+													</Link>
+												))}
+											</>
+										)}
 										{navItems.map((item) => {
 											const Icon = item.icon;
 											const active = isActive(item.href);
@@ -691,11 +820,11 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 								className="fixed inset-0 z-[100] flex items-center justify-center px-4"
 							>
 								{/* Backdrop */}
-								<div 
+								<div
 									className="absolute inset-0 bg-black/20 backdrop-blur-sm"
 									onClick={() => !passwordLoading && setPasswordModalOpen(false)}
 								/>
-								
+
 								{/* Modal Panel */}
 								<motion.div
 									initial={{ opacity: 0, y: 20, scale: 0.95 }}

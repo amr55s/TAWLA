@@ -89,7 +89,24 @@ export default function RootLayout({
 						<ReactQueryProvider>
 							<PostHogProvider>{children}</PostHogProvider>
 							<Analytics />
-							<Toaster position="top-right" closeButton />
+							<Toaster
+								position="top-center"
+								visibleToasts={1}
+								duration={3500}
+								toastOptions={{
+									unstyled: true,
+									classNames: {
+										toast: "group flex items-center gap-3 w-[350px] max-w-[90vw] p-4 bg-white border border-gray-100 shadow-[0_20px_40px_-15px_rgba(15,76,117,0.15)] rounded-2xl transition-all",
+										title: "text-[#0F4C75] font-black text-[15px] leading-tight",
+										description: "text-slate-500 text-sm font-medium mt-0.5",
+										icon: "text-[#0F4C75] w-6 h-6 flex-shrink-0 animate-in zoom-in-50 duration-300",
+										actionButton: "bg-[#0F4C75] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition-transform active:scale-95 hover:bg-[#0A3558]",
+										cancelButton: "bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors",
+										error: "border-l-4 border-l-red-500", // Optional accent for errors
+										success: "border-l-4 border-l-[#3282B8]", // Tawla Sky Blue accent for success
+									},
+								}}
+							/>
 						</ReactQueryProvider>
 					</ThemeProvider>
 				</TooltipProvider>

@@ -80,7 +80,7 @@ export default function ConfirmOrderPage({
 
 			const { error } = await supabase
 				.from("orders")
-				.update({ status: "confirmed_by_waiter" })
+				.update({ status: "in_kitchen" })
 				.eq("id", orderId)
 				.eq("restaurant_id", restaurantId);
 

@@ -32,8 +32,10 @@ export async function mockSubscribe(restaurantId: string, planId: string) {
 	const { error } = await supabase
 		.from("restaurants")
 		.update({
+			plan: planId,
 			subscription_status: "active",
 			subscription_plan: planId,
+			trial_ends_at: null,
 			current_period_end: currentPeriodEnd.toISOString(),
 			is_active: true,
 		})

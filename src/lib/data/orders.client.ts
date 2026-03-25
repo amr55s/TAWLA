@@ -17,7 +17,9 @@ export async function getRestaurantBySlugClient(
 ): Promise<Restaurant | null> {
 	const { data, error } = await supabase
 		.from("restaurants")
-		.select("id, name, slug, logo_url, theme_colors, created_at")
+		.select(
+			"id, name, slug, logo_url, theme_colors, created_at, plan, trial_ends_at, max_tables, max_orders_monthly, parent_id, is_master, is_active, owner_id, subscription_status, subscription_plan, current_period_end, currency_symbol",
+		)
 		.eq("slug", slug)
 		.maybeSingle();
 

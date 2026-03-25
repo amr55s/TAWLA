@@ -7,6 +7,7 @@ import Script from "next/script";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { verifySpaceRemitPayment } from "@/app/actions/payment";
+import { PLAN_CATALOG, isPaidPlanId } from "@/lib/billing/plans";
 
 declare global {
 	interface Window {
@@ -29,36 +30,12 @@ export default function CheckoutPage() {
 	const searchParams = useSearchParams();
 	const router = useRouter();
 
-	const planId = searchParams.get("plan") || "pro";
+	const rawPlanId = searchParams.get("plan") || "pro";
+	const planId = isPaidPlanId(rawPlanId) ? rawPlanId : "pro";
 	const [loading, setLoading] = useState(false);
 	const [scriptLoaded, setScriptLoaded] = useState(false);
 
-	const planDetails = {
-		pro: {
-			name: "Professional",
-			price: 49,
-			features: [
-				"Unlimited menu items",
-				"Up to 25 tables",
-				"Up to 5 Staff accounts",
-				"Waiter & Cashier Hub",
-				"Custom branding (No watermark)",
-			],
-		},
-		enterprise: {
-			name: "Enterprise",
-			price: 99,
-			features: [
-				"Unlimited tables & staff",
-				"Autonomous AI features",
-				"Kitchen Display System (KDS)",
-				"Advanced predictive analytics",
-				"Priority 24/7 support",
-			],
-		},
-	};
-
-	const plan = planDetails[planId as keyof typeof planDetails];
+	const plan = PLAN_CATALOG[planId];
 
 	useEffect(() => {
 		// Set global variables required by SpaceRemit script
@@ -106,7 +83,15 @@ export default function CheckoutPage() {
 				setLoading(false);
 			} else {
 				toast.success("Payment successful! Subscription upgraded.");
-				router.push(`/${slug}/checkout/success?plan=${planId}`);
+				const resolvedPlan =
+					"plan" in result && typeof result.plan === "string"
+						? result.plan
+						: planId;
+				const resolvedSlug =
+					"slug" in result && typeof result.slug === "string"
+						? result.slug
+						: slug;
+				router.push(`/${resolvedSlug}/checkout/success?plan=${resolvedPlan}`);
 			}
 		};
 
@@ -133,6 +118,7 @@ export default function CheckoutPage() {
 	// Used in the hidden form details
 	const userFullName = "Restaurant Admin"; 
 	const userEmail = "admin@restaurant.com";
+	const paymentNotes = restaurantId ? `tawla|restaurant:${restaurantId}|plan:${plan.id}` : `tawla|plan:${plan.id}`;
 
 	return (
 		<div className="max-w-3xl mx-auto space-y-8">
@@ -164,18 +150,18 @@ export default function CheckoutPage() {
 						<div className="flex items-center justify-between py-4 border-b border-[#E8ECF1]">
 							<div>
 								<p className="font-semibold text-[#0A1628]">
-									Tawla {plan.name} Plan
+									Tawla {plan.label} Plan
 								</p>
 								<p className="text-sm text-[#7B8BA3]">Monthly subscription</p>
 							</div>
-							<p className="font-bold text-[#0A1628]">${plan.price}.00</p>
+							<p className="font-bold text-[#0A1628]">${plan.monthlyPriceUsd}.00</p>
 						</div>
 					</div>
 
 					<div className="space-y-4">
 						<div className="flex justify-between text-[#0A1628] font-bold text-lg">
 							<span>Total Due</span>
-							<span>${plan.price}.00</span>
+							<span>${plan.monthlyPriceUsd}.00</span>
 						</div>
 					</div>
 					
@@ -202,10 +188,11 @@ export default function CheckoutPage() {
 					>
 						<h3 className="text-sm font-bold text-[#0A1628] mb-5 uppercase tracking-wider">Payment Details</h3>
 						
-						<input type="hidden" name="amount" value={plan.price} />
+						<input type="hidden" name="amount" value={plan.monthlyPriceUsd} />
 						<input type="hidden" name="currency" value="USD" />
 						<input type="hidden" name="fullname" value={userFullName} />
 						<input type="hidden" name="email" value={userEmail} />
+						<input type="hidden" name="notes" value={paymentNotes} />
 
 						<div className="sp-one-type-select mb-4 hidden">
 							<input type="radio" name="sp-pay-type-radio" value="local-methods-pay" id="sp_local_methods_radio" defaultChecked />
@@ -227,7 +214,7 @@ export default function CheckoutPage() {
 							type="submit" 
 							className="w-full py-3.5 bg-[#0F4C75] hover:bg-[#0A3558] transition-colors text-white rounded-xl font-bold"
 						>
-							Pay Now (${plan.price}.00)
+							Pay Now (${plan.monthlyPriceUsd}.00)
 						</button>
 						
 						{!scriptLoaded && (

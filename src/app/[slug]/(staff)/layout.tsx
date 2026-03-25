@@ -10,6 +10,7 @@ import {
 	Users,
 } from "lucide-react";
 import { StaffLayout, NavigationItem } from "@/components/layout/StaffLayout";
+import { clearStaffSession } from "@/app/actions/staff-auth";
 
 export default function StaffRouteLayout({
 	children,
@@ -30,8 +31,8 @@ export default function StaffRouteLayout({
 		{ name: "Settings", href: `${basePath}/settings`, icon: Settings },
 	];
 
-	const handleSignOut = () => {
-		// e.g. await supabase.auth.signOut()
+	const handleSignOut = async () => {
+		await clearStaffSession();
 		console.log("Signing out user...");
 		router.push("/");
 	};

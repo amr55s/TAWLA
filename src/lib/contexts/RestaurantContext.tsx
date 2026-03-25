@@ -15,9 +15,14 @@ interface RestaurantContextType {
 	slug: string | null;
 	loading: boolean;
 	error: string | null;
+	plan: "trial" | "starter" | "pro" | "enterprise" | null;
 	subscriptionStatus: string | null;
 	trialEndsAt: string | null;
 	isActive: boolean | null;
+	isMaster: boolean;
+	parentId: string | null;
+	maxTables: number | null;
+	maxOrdersMonthly: number | null;
 	currencySymbol: string;
 }
 
@@ -26,9 +31,14 @@ const RestaurantContext = createContext<RestaurantContextType>({
 	slug: null,
 	loading: true,
 	error: null,
+	plan: null,
 	subscriptionStatus: null,
 	trialEndsAt: null,
 	isActive: null,
+	isMaster: false,
+	parentId: null,
+	maxTables: null,
+	maxOrdersMonthly: null,
 	currencySymbol: "EGP",
 });
 
@@ -45,9 +55,14 @@ export function RestaurantProvider({
 	const [slug, setSlug] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [plan, setPlan] = useState<"trial" | "starter" | "pro" | "enterprise" | null>(null);
 	const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
 	const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
 	const [isActive, setIsActive] = useState<boolean | null>(null);
+	const [isMaster, setIsMaster] = useState(false);
+	const [parentId, setParentId] = useState<string | null>(null);
+	const [maxTables, setMaxTables] = useState<number | null>(null);
+	const [maxOrdersMonthly, setMaxOrdersMonthly] = useState<number | null>(null);
 	const [currencySymbol, setCurrencySymbol] = useState<string>("EGP");
 
 	const router = useRouter();
@@ -73,7 +88,7 @@ export function RestaurantProvider({
 				if (initialSlug) {
 					const { data, error: dbError } = await supabase
 						.from("restaurants")
-						.select("id, owner_id, slug, subscription_status, trial_ends_at, is_active, currency_symbol")
+						.select("id, owner_id, slug, plan, subscription_status, trial_ends_at, is_active, currency_symbol, is_master, parent_id, max_tables, max_orders_monthly")
 						.eq("slug", initialSlug)
 						.maybeSingle();
 
@@ -98,14 +113,24 @@ export function RestaurantProvider({
 					currentRestId = data.id;
 					currentSlug = data.slug;
 					if (mounted) {
-						setSubscriptionStatus(data.subscription_status ?? null);
+						setPlan((data.plan as "trial" | "starter" | "pro" | "enterprise" | null) ?? null);
+						setSubscriptionStatus(
+							data.subscription_status ??
+								(data.plan === "trial" ? "trialing" : data.plan ? "active" : null),
+						);
 						setTrialEndsAt(data.trial_ends_at ?? null);
 						setIsActive(data.is_active ?? null);
+						setIsMaster(Boolean(data.is_master));
+						setParentId((data.parent_id as string | null) ?? null);
+						setMaxTables((data.max_tables as number | null) ?? null);
+						setMaxOrdersMonthly((data.max_orders_monthly as number | null) ?? null);
 						setCurrencySymbol((data as any).currency_symbol || "EGP");
 					}
 				} else {
 					// Fallback if no initialSlug provided
-					let query = supabase.from("restaurants").select("id, slug, subscription_status, trial_ends_at, is_active");
+					let query = supabase
+						.from("restaurants")
+						.select("id, slug, plan, subscription_status, trial_ends_at, is_active, currency_symbol, is_master, parent_id, max_tables, max_orders_monthly");
 
 					if (currentRestId) {
 						query = query.or(`owner_id.eq.${user.id},id.eq.${currentRestId}`);
@@ -120,9 +145,17 @@ export function RestaurantProvider({
 						currentRestId = data[0].id;
 						currentSlug = data[0].slug;
 						if (mounted) {
-							setSubscriptionStatus(data[0].subscription_status ?? null);
+							setPlan((data[0].plan as "trial" | "starter" | "pro" | "enterprise" | null) ?? null);
+							setSubscriptionStatus(
+								data[0].subscription_status ??
+									(data[0].plan === "trial" ? "trialing" : data[0].plan ? "active" : null),
+							);
 							setTrialEndsAt(data[0].trial_ends_at ?? null);
 							setIsActive(data[0].is_active ?? null);
+							setIsMaster(Boolean(data[0].is_master));
+							setParentId((data[0].parent_id as string | null) ?? null);
+							setMaxTables((data[0].max_tables as number | null) ?? null);
+							setMaxOrdersMonthly((data[0].max_orders_monthly as number | null) ?? null);
 							setCurrencySymbol((data[0] as any).currency_symbol || "EGP");
 						}
 						if (requireAdmin) {
@@ -185,7 +218,23 @@ export function RestaurantProvider({
 	}, [initialSlug, requireAdmin, router]);
 
 	return (
-		<RestaurantContext.Provider value={{ restaurantId, slug, loading, error, subscriptionStatus, trialEndsAt, isActive, currencySymbol }}>
+		<RestaurantContext.Provider
+			value={{
+				restaurantId,
+				slug,
+				loading,
+				error,
+				plan,
+				subscriptionStatus,
+				trialEndsAt,
+				isActive,
+				isMaster,
+				parentId,
+				maxTables,
+				maxOrdersMonthly,
+				currencySymbol,
+			}}
+		>
 			{children}
 		</RestaurantContext.Provider>
 	);

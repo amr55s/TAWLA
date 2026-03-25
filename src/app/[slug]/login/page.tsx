@@ -9,6 +9,7 @@ import React, { use, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getRestaurantBySlugClient } from "@/lib/data/orders.client";
 import { createClient } from "@/lib/supabase/client";
+import { setStaffSession } from "@/app/actions/staff-auth";
 
 export default function UnifiedStaffLogin({
 	params,
@@ -85,6 +86,13 @@ export default function UnifiedStaffLogin({
 
 			// Persist session
 			localStorage.setItem(`tawla_staff_${restaurantId}_${staff.role}`, staff.id);
+			
+			// Set Server-side Cookie Session for Middleware
+			await setStaffSession({
+				role: staff.role,
+				restaurant_id: staff.restaurant_id,
+				slug: slug
+			});
 
 			posthog.identify(`staff_${staff.id}`, {
 				staff_name: staff.name,

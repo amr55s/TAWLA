@@ -5,6 +5,7 @@ export type OrderStatus =
 	| "confirmed_by_waiter"
 	| "in_kitchen"
 	| "ready"
+	| "delivered"
 	| "served"
 	| "paid"
 	| "cancelled"
@@ -25,6 +26,18 @@ export interface Restaurant {
 	slug: string;
 	logo_url: string | null;
 	theme_colors: ThemeColors;
+	plan?: "trial" | "starter" | "pro" | "enterprise" | null;
+	trial_ends_at?: string | null;
+	max_tables?: number | null;
+	max_orders_monthly?: number | null;
+	parent_id?: string | null;
+	is_master?: boolean;
+	owner_id?: string | null;
+	is_active?: boolean | null;
+	subscription_status?: string | null;
+	subscription_plan?: string | null;
+	current_period_end?: string | null;
+	currency_symbol?: string | null;
 	table_count?: number;
 	created_at?: string;
 }

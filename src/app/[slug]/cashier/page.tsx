@@ -34,6 +34,8 @@ import type { Restaurant, Table } from "@/types/database";
 import { useSmartPresence } from "@/hooks/useSmartPresence";
 import { useRestaurantRealtime } from "@/hooks/useRestaurantRealtime";
 import { logger } from "@/lib/logger";
+import { clearStaffSession } from "@/app/actions/staff-auth";
+
 
 const supabase = createClient();
 
@@ -55,13 +57,10 @@ interface TableOrder {
 }
 
 const CASHIER_ACTIVE_ORDER_STATUSES = [
-	"confirmed",
-	"preparing",
-	"served",
-	"confirmed_by_waiter",
+	"pending",
 	"in_kitchen",
 	"ready",
-	"pending", // Sometimes orders arrive as pending
+	"delivered",
 ] as const;
 
 // Generates a short order ID from UUID, e.g. "ORD-4A2F"
@@ -343,7 +342,7 @@ export default function CashierDashboardPage({
 				.insert({
 					restaurant_id: restaurant.id,
 					table_id: selectedTableId,
-					status: "confirmed", 
+					status: "in_kitchen",
 					total_amount: cartTotal,
 				})
 				.select("id")
@@ -460,7 +459,8 @@ export default function CashierDashboardPage({
 						<span className="text-[11px] text-[#047857] font-bold uppercase tracking-widest">Online</span>
 					</div>
 					<button
-						onClick={() => {
+						onClick={async () => {
+							await clearStaffSession();
 							localStorage.removeItem(`tawla_staff_${restaurant?.id}_cashier`);
 							router.push(`/${slug}/login`);
 						}}

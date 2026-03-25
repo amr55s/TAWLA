@@ -75,12 +75,9 @@ export default function GuestOrdersPage({
 			.eq("restaurant_id", restaurant.id)
 			.in("status", [
 				"pending",
-				"confirmed",
-				"preparing",
-				"confirmed_by_waiter",
 				"in_kitchen",
 				"ready",
-				"served",
+				"delivered",
 			])
 			// oldest first → Order #1, Order #2, …
 			.order("created_at", { ascending: true });
@@ -123,20 +120,25 @@ export default function GuestOrdersPage({
 						Waiting for Waiter
 					</span>
 				);
-			case "confirmed":
-			case "preparing":
-			case "confirmed_by_waiter":
 			case "in_kitchen":
-			case "ready":
 				return (
 					<span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200 uppercase tracking-wider flex items-center gap-1">
 						<div className="w-3 h-3 rounded-full bg-blue-100 flex items-center justify-center">
 							<span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
 						</div>
-						Confirmed &amp; Preparing
+						Being Prepared
 					</span>
 				);
-			case "served":
+			case "ready":
+				return (
+					<span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase tracking-wider flex items-center gap-1">
+						<div className="w-3 h-3 rounded-full bg-emerald-100 flex items-center justify-center">
+							<span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+						</div>
+						Ready for Pickup
+					</span>
+				);
+			case "delivered":
 				return (
 					<span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase tracking-wider flex items-center gap-1">
 						✓ Served

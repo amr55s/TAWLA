@@ -203,7 +203,11 @@ function OnboardingInner() {
 						cuisine_type: cuisineType,
 						owner_id: user.id,
 						currency_symbol: detectedGeo.symbol || "ج.م",
-						subscription_plan: "starter",
+						plan: "trial",
+						trial_ends_at: new Date(
+							Date.now() + 14 * 24 * 60 * 60 * 1000,
+						).toISOString(),
+						subscription_status: "trialing",
 					},
 				])
 				.select()

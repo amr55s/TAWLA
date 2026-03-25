@@ -12,11 +12,17 @@ import {
 	Palette,
 	QrCode,
 } from "lucide-react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { createBranchRestaurant } from "@/app/actions/restaurant-branches";
+import {
+	PLAN_CATALOG,
+	getRecommendedUpgrade,
+	type RestaurantPlan,
+} from "@/lib/billing/plans";
 
 const supabase = createClient();
 
@@ -40,6 +46,10 @@ interface RestaurantSettings {
 	name: string;
 	slug: string;
 	theme_colors: ThemeData | null;
+	plan: RestaurantPlan | null;
+	max_tables: number | null;
+	max_orders_monthly: number | null;
+	is_master: boolean;
 }
 
 function ColorField({
@@ -114,6 +124,7 @@ function SectionCard({
 export default function AdminSettingsPage() {
 	const params = useParams<{ slug: string }>();
 	const slug = params.slug;
+	const router = useRouter();
 
 	const [restaurant, setRestaurant] = useState<RestaurantSettings | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -129,10 +140,15 @@ export default function AdminSettingsPage() {
 	const [tableCount, setTableCount] = useState<number>(10);
 	const [currentTableCount, setCurrentTableCount] = useState<number>(0);
 	const [savingTables, setSavingTables] = useState(false);
+	const [limitModalOpen, setLimitModalOpen] = useState(false);
+	const [limitModalMessage, setLimitModalMessage] = useState("");
 
 	// QR
 	const [baseUrl, setBaseUrl] = useState("");
 	const qrRef = useRef<HTMLDivElement>(null);
+	const [branchName, setBranchName] = useState("");
+	const [creatingBranch, setCreatingBranch] = useState(false);
+	const [branches, setBranches] = useState<Array<{ id: string; name: string; slug: string }>>([]);
 
 	// ── Auth: slug-based fetch, verify ownership ──
 	const fetchSettings = useCallback(async () => {
@@ -151,7 +167,7 @@ export default function AdminSettingsPage() {
 			// Fetch restaurant by slug
 			const { data: rest, error: restError } = await supabase
 				.from("restaurants")
-				.select("id, name, slug, theme_colors")
+				.select("id, name, slug, theme_colors, plan, max_tables, max_orders_monthly, is_master")
 				.eq("slug", slug)
 				.maybeSingle();
 
@@ -188,6 +204,17 @@ export default function AdminSettingsPage() {
 			const actualCount = count ?? 0;
 			setCurrentTableCount(actualCount);
 			setTableCount(actualCount || 10);
+
+			if (rest.plan === "enterprise" || rest.is_master) {
+				const { data: branchRows } = await supabase
+					.from("restaurants")
+					.select("id, name, slug")
+					.eq("parent_id", rest.id)
+					.order("created_at", { ascending: true });
+				setBranches((branchRows as Array<{ id: string; name: string; slug: string }>) || []);
+			} else {
+				setBranches([]);
+			}
 
 			if (typeof window !== "undefined") {
 				setBaseUrl(window.location.origin);
@@ -236,8 +263,18 @@ export default function AdminSettingsPage() {
 	// ── Save Tables (sync missing tables) ──
 	const handleSaveTables = async () => {
 		if (!restaurant) return;
-		if (tableCount < 1 || tableCount > 200) {
-			toast.error("Table count must be between 1 and 200");
+		if (tableCount < 1 || tableCount > 999) {
+			toast.error("Table count must be between 1 and 999");
+			return;
+		}
+
+		const maxTables = restaurant.max_tables ?? PLAN_CATALOG.trial.maxTables;
+		if (tableCount > maxTables) {
+			const nextPlan = getRecommendedUpgrade(restaurant.plan ?? "trial");
+			setLimitModalMessage(
+				`Your ${restaurant.plan ?? "trial"} plan allows up to ${maxTables} tables. Upgrade to ${PLAN_CATALOG[nextPlan].label} to continue.`,
+			);
+			setLimitModalOpen(true);
 			return;
 		}
 
@@ -295,6 +332,22 @@ export default function AdminSettingsPage() {
 		} finally {
 			setSavingTables(false);
 		}
+	};
+
+	const handleCreateBranch = async () => {
+		if (!restaurant) return;
+		setCreatingBranch(true);
+		const result = await createBranchRestaurant(restaurant.id, branchName);
+		setCreatingBranch(false);
+
+		if (!result.ok || !result.branch) {
+			toast.error(result.error ?? "Could not create branch");
+			return;
+		}
+
+		setBranchName("");
+		setBranches((prev) => [...prev, result.branch]);
+		toast.success(`Branch created: ${result.branch.slug}`);
 	};
 
 	// ── QR Download ──
@@ -371,13 +424,14 @@ export default function AdminSettingsPage() {
 			<div className="mb-8">
 				<h1 className="text-2xl font-black text-[#0A1628]">Settings</h1>
 				{restaurant && (
-					<div className="flex items-center gap-1.5 mt-1 text-sm text-[#64748B]">
-						<span className="font-semibold text-[#0F4C75]">
-							{restaurant.name}
-						</span>
+					<div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[#64748B]">
+						<span className="font-semibold text-[#0F4C75]">{restaurant.name}</span>
 						<ChevronRight size={14} />
 						<span className="text-xs font-mono bg-[#F1F5F9] px-2 py-0.5 rounded-lg">
 							/{slug}/admin
+						</span>
+						<span className="rounded-full border border-[#D6E4F0] bg-white px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[#0A1628]">
+							{PLAN_CATALOG[restaurant.plan ?? "trial"].label}
 						</span>
 					</div>
 				)}
@@ -475,6 +529,9 @@ export default function AdminSettingsPage() {
 							<p className="text-2xl font-black text-[#0F4C75]">
 								{currentTableCount} tables
 							</p>
+							<p className="mt-1 text-[11px] text-[#64748B]">
+								Plan limit: {restaurant?.max_tables ?? PLAN_CATALOG.trial.maxTables} tables
+							</p>
 						</div>
 						<div className="w-10 h-10 rounded-xl bg-[#E8F4FD] flex items-center justify-center">
 							<LayoutGrid size={18} className="text-[#0F4C75]" />
@@ -488,7 +545,7 @@ export default function AdminSettingsPage() {
 						<input
 							type="number"
 							min="1"
-							max="200"
+							max={restaurant?.max_tables ?? 999}
 							value={tableCount}
 							onChange={(e) => setTableCount(Number(e.target.value))}
 							className="w-full py-2.5 px-3 bg-[#F8FAFC] border border-[#E8ECF1] rounded-xl text-sm text-[#0A1628] focus:outline-none focus:ring-2 focus:ring-[#0F4C75]/20 focus:border-[#0F4C75] transition-colors"
@@ -520,6 +577,70 @@ export default function AdminSettingsPage() {
 						)}
 					</motion.button>
 				</SectionCard>
+
+				{restaurant?.plan === "enterprise" && (
+					<SectionCard
+						title="Branch Network"
+						description="Create and manage branch slugs under your Enterprise master account"
+						icon={Building2}
+					>
+						<div className="rounded-2xl border border-[#E8ECF1] bg-[#F8FAFC] p-4">
+							<p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#94A3B8]">
+								New Branch
+							</p>
+							<div className="mt-3 flex flex-col gap-3 sm:flex-row">
+								<input
+									type="text"
+									value={branchName}
+									onChange={(e) => setBranchName(e.target.value)}
+									placeholder="Hekaya Maadi"
+									className="flex-1 rounded-xl border border-[#E8ECF1] bg-white px-3 py-2.5 text-sm text-[#0A1628] focus:border-[#0F4C75] focus:outline-none"
+								/>
+								<button
+									type="button"
+									onClick={handleCreateBranch}
+									disabled={creatingBranch || branchName.trim().length < 2}
+									className="rounded-xl bg-[#0F4C75] px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+								>
+									{creatingBranch ? "Creating..." : "Create Branch"}
+								</button>
+							</div>
+							<p className="mt-2 text-[11px] text-[#64748B]">
+								New branches are created with slugs like `{restaurant.slug}-branch-2`.
+							</p>
+						</div>
+
+						<div className="space-y-2">
+							<p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#94A3B8]">
+								Existing Branches
+							</p>
+							{branches.length === 0 ? (
+								<div className="rounded-2xl border border-dashed border-[#D6E4F0] bg-white px-4 py-5 text-sm text-[#64748B]">
+									No branches yet. Your first branch will inherit the enterprise plan.
+								</div>
+							) : (
+								branches.map((branch) => (
+									<div
+										key={branch.id}
+										className="flex items-center justify-between rounded-2xl border border-[#E8ECF1] bg-white px-4 py-3"
+									>
+										<div>
+											<p className="text-sm font-bold text-[#0A1628]">{branch.name}</p>
+											<p className="text-xs font-mono text-[#64748B]">/{branch.slug}/admin</p>
+										</div>
+										<button
+											type="button"
+											onClick={() => router.push(`/${branch.slug}/admin`)}
+											className="rounded-xl border border-[#D6E4F0] px-3 py-2 text-xs font-bold text-[#0F4C75]"
+										>
+											Open
+										</button>
+									</div>
+								))
+							)}
+						</div>
+					</SectionCard>
+				)}
 
 				{/* ── Card 3: QR Code ── */}
 				<SectionCard
@@ -582,6 +703,54 @@ export default function AdminSettingsPage() {
 					</div>
 				</SectionCard>
 			</div>
+
+			<AnimatePresence>
+				{limitModalOpen && (
+					<motion.div
+						initial={{ opacity: 0 }}
+						animate={{ opacity: 1 }}
+						exit={{ opacity: 0 }}
+						className="fixed inset-0 z-50 flex items-center justify-center px-4"
+					>
+						<div
+							className="absolute inset-0 bg-[#0A1628]/35 backdrop-blur-sm"
+							onClick={() => setLimitModalOpen(false)}
+						/>
+						<motion.div
+							initial={{ opacity: 0, y: 16, scale: 0.96 }}
+							animate={{ opacity: 1, y: 0, scale: 1 }}
+							exit={{ opacity: 0, y: 16, scale: 0.96 }}
+							className="relative w-full max-w-md rounded-[28px] border border-[#E8ECF1] bg-white p-6 shadow-[0_24px_80px_rgba(10,22,40,0.18)]"
+						>
+							<div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FFF3E8] text-[#C17B2C]">
+								<Building2 size={22} />
+							</div>
+							<h3 className="text-2xl font-black tracking-[-0.03em] text-[#0A1628]">
+								Upgrade to keep growing
+							</h3>
+							<p className="mt-3 text-sm leading-6 text-[#5A6B82]">
+								{limitModalMessage}
+							</p>
+							<div className="mt-6 flex gap-3">
+								<button
+									type="button"
+									onClick={() => setLimitModalOpen(false)}
+									className="flex-1 rounded-2xl border border-[#D6E4F0] px-4 py-3 text-sm font-bold text-[#0A1628]"
+								>
+									Not now
+								</button>
+								<button
+									type="button"
+									onClick={() => router.push(`/${slug}/admin/settings/billing`)}
+									className="flex-1 rounded-2xl bg-[#0F4C75] px-4 py-3 text-sm font-bold text-white"
+								>
+									View plans
+								</button>
+							</div>
+						</motion.div>
+					</motion.div>
+				)}
+			</AnimatePresence>
 		</div>
 	);
 }

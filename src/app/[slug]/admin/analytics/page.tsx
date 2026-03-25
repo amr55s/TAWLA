@@ -41,6 +41,7 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import type { DateRange } from "react-day-picker";
+import { getKitchenPerformance } from "@/app/actions/analytics.actions";
 
 // ─── TypeScript Interfaces ───────────────────────────────────────────
 interface PnlData {
@@ -118,6 +119,12 @@ export default function AdminAnalyticsPage() {
 	const [calOpen, setCalOpen] = useState(false);
 	const [mounted, setMounted] = useState(false);
 
+	const [kitchenPerf, setKitchenPerf] = useState<{
+		averageMinutes: number;
+		morningAverageMinutes: number;
+		eveningAverageMinutes: number;
+	} | null>(null);
+
 	useEffect(() => setMounted(true), []);
 
 	// Expense modal
@@ -155,9 +162,22 @@ export default function AdminAnalyticsPage() {
 		}
 	}, [restaurantId, dateRange, supabase]);
 
+	const fetchKitchenPerf = useCallback(async () => {
+		if (!restaurantId) return;
+		const res = await getKitchenPerformance(restaurantId);
+		if (!res.error) {
+			setKitchenPerf({
+				averageMinutes: res.averageMinutes,
+				morningAverageMinutes: res.morningAverageMinutes,
+				eveningAverageMinutes: res.eveningAverageMinutes,
+			});
+		}
+	}, [restaurantId]);
+
 	useEffect(() => {
 		fetchAnalytics();
-	}, [fetchAnalytics]);
+		fetchKitchenPerf();
+	}, [fetchAnalytics, fetchKitchenPerf]);
 
 	// ─── Save expense ────────────────────────────────────────────────
 	const handleSaveExpense = async () => {
@@ -502,6 +522,78 @@ export default function AdminAnalyticsPage() {
 								<ArrowUpRight size={18} />
 							</div>
 						</Link>
+					</div>
+
+					{/* ─── Kitchen Analytics Row ──────────────────────────── */}
+					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+						{/* Overall Prep Time */}
+						<div className="bg-white rounded-2xl border border-[#E8ECF1] p-6 relative group overflow-hidden">
+							<div className="flex items-center justify-between mb-3">
+								<span className="text-[10px] font-bold text-[#7B8BA3] uppercase tracking-widest">
+									Average Prep Time
+								</span>
+								<div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center">
+									<Clock size={16} className="text-orange-500" />
+								</div>
+							</div>
+							<div className="flex items-baseline gap-2">
+								<p className="text-3xl font-black text-[#0A1628] tracking-tight">
+									{kitchenPerf?.averageMinutes ?? 0}
+								</p>
+								<span className="text-sm font-bold text-[#94A3B8]">mins</span>
+							</div>
+							<p className="text-[11px] text-[#94A3B8] mt-1 pr-8">
+								From order creation to &apos;Ready&apos; status
+							</p>
+							{/* Decorative background icon */}
+							<Clock size={80} className="absolute -bottom-4 -right-4 text-orange-500/5 rotate-12" />
+						</div>
+
+						{/* Shift Breakdown */}
+						<div className="bg-white rounded-2xl border border-[#E8ECF1] p-6 relative group overflow-hidden">
+							<div className="flex items-center justify-between mb-3">
+								<span className="text-[10px] font-bold text-[#7B8BA3] uppercase tracking-widest">
+									Shift Analysis
+								</span>
+								<div className="w-8 h-8 rounded-xl bg-[#F0F4F8] flex items-center justify-center">
+									<Users size={16} className="text-[#5A6B82]" />
+								</div>
+							</div>
+							
+							<div className="space-y-4">
+								<div className="flex items-center justify-between">
+									<div className="flex flex-col">
+										<span className="text-sm font-semibold text-[#0A1628]">Morning Shift</span>
+										<span className="text-[10px] text-[#94A3B8]">06:00 – 16:00</span>
+									</div>
+									<div className="flex items-center gap-2">
+										<span className="text-lg font-bold text-[#0A1628]">{kitchenPerf?.morningAverageMinutes ?? 0} min</span>
+										{kitchenPerf && kitchenPerf.morningAverageMinutes > kitchenPerf.eveningAverageMinutes && kitchenPerf.eveningAverageMinutes > 0 && (
+											<span className="px-1.5 py-0.5 rounded-md bg-red-50 text-[10px] font-bold text-red-500 border border-red-100">
+												SLOWER
+											</span>
+										)}
+									</div>
+								</div>
+
+								<div className="w-full h-px bg-[#F1F5F9]" />
+
+								<div className="flex items-center justify-between">
+									<div className="flex flex-col">
+										<span className="text-sm font-semibold text-[#0A1628]">Evening Shift</span>
+										<span className="text-[10px] text-[#94A3B8]">16:00 – 02:00</span>
+									</div>
+									<div className="flex items-center gap-2">
+										<span className="text-lg font-bold text-[#0A1628]">{kitchenPerf?.eveningAverageMinutes ?? 0} min</span>
+										{kitchenPerf && kitchenPerf.eveningAverageMinutes > kitchenPerf.morningAverageMinutes && kitchenPerf.morningAverageMinutes > 0 && (
+											<span className="px-1.5 py-0.5 rounded-md bg-red-50 text-[10px] font-bold text-red-500 border border-red-100">
+												SLOWER
+											</span>
+										)}
+									</div>
+								</div>
+							</div>
+						</div>
 					</div>
 
 					{/* ─── Charts Row ──────────────────────────────────────── */}
