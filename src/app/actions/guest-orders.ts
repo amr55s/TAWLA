@@ -46,7 +46,7 @@ export async function createGuestOrder(
 
 	const { data: restaurant, error: restaurantError } = await supabase
 		.from("restaurants")
-		.select("id, plan, trial_ends_at, subscription_status, is_active")
+		.select("id, plan, trial_ends_at, subscription_status, is_active, max_orders_monthly")
 		.eq("id", input.restaurant_id)
 		.maybeSingle();
 
@@ -69,6 +69,35 @@ export async function createGuestOrder(
 			ok: false,
 			error: "Ordering is currently unavailable for this restaurant.",
 		};
+	}
+
+	if (restaurant.max_orders_monthly != null) {
+		const monthStart = new Date();
+		monthStart.setDate(1);
+		monthStart.setHours(0, 0, 0, 0);
+
+		const { count: monthlyOrderCount, error: monthlyOrderCountError } =
+			await supabase
+				.from("orders")
+				.select("id", { count: "exact", head: true })
+				.eq("restaurant_id", input.restaurant_id)
+				.gte("created_at", monthStart.toISOString());
+
+		if (monthlyOrderCountError) {
+			return {
+				ok: false,
+				error:
+					monthlyOrderCountError.message ??
+					"Failed to validate monthly order volume.",
+			};
+		}
+
+		if ((monthlyOrderCount ?? 0) >= restaurant.max_orders_monthly) {
+			return {
+				ok: false,
+				error: `This restaurant has reached its monthly order limit of ${restaurant.max_orders_monthly}.`,
+			};
+		}
 	}
 
 	const uniqueItemIds = Array.from(

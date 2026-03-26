@@ -671,7 +671,7 @@ export default function WaiterDashboardPage({
 
 			{restaurant?.plan === "pro" &&
 				restaurant.max_orders_monthly != null &&
-				monthlyOrdersCount > restaurant.max_orders_monthly && (
+				monthlyOrdersCount >= restaurant.max_orders_monthly && (
 					<div className="border-b border-[#F9D7AE] bg-[#FFF4E8] px-5 py-3">
 						<div className="flex items-center gap-2 text-sm font-semibold text-[#A15C17]">
 							<CircleAlert size={16} />

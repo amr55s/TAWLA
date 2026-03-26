@@ -86,6 +86,9 @@ export async function verifySpaceRemitPayment(paymentCode: string, planId: strin
 		const resolvedPlanId = paidPlanFromGateway ?? planId;
 
 		if (data?.response_status === "success" && validStatus) {
+			const nextBillingDate = new Date();
+			nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+
 			const { data: restaurant } = await supabase
 				.from("restaurants")
 				.select("id, owner_id, slug")
@@ -128,7 +131,7 @@ export async function verifySpaceRemitPayment(paymentCode: string, planId: strin
 					subscription_plan: resolvedPlanId,
 					subscription_status: "active",
 					trial_ends_at: null,
-					current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+					current_period_end: nextBillingDate.toISOString(),
 					is_active: true,
 				})
 				.eq("id", restaurantId);
@@ -139,8 +142,14 @@ export async function verifySpaceRemitPayment(paymentCode: string, planId: strin
 			}
 
 			revalidatePath("/", "layout");
+			revalidatePath(`/${restaurant.slug}`, "page");
+			revalidatePath(`/${restaurant.slug}/menu`, "page");
+			revalidatePath(`/${restaurant.slug}/cart`, "page");
+			revalidatePath(`/${restaurant.slug}/checkout`, "page");
+			revalidatePath(`/${restaurant.slug}/checkout/success`, "page");
 			revalidatePath(`/${restaurant.slug}/admin`, "layout");
 			revalidatePath(`/${restaurant.slug}/admin/settings/billing`, "page");
+			revalidatePath(`/${restaurant.slug}/admin/settings/checkout`, "page");
 			return {
 				success: true,
 				plan: resolvedPlanId,

@@ -1,3 +1,5 @@
+import { PRO_TRIAL_DAYS } from "@/lib/billing/trial";
+
 export type RestaurantPlan = "trial" | "starter" | "pro" | "enterprise";
 export type PaidPlanId = Exclude<RestaurantPlan, "trial">;
 
@@ -24,7 +26,7 @@ export const PLAN_CATALOG: Record<RestaurantPlan, PlanDefinition> = {
 		maxStaff: 5,
 		multiBranch: false,
 		features: [
-			"14-day Pro trial",
+			`${PRO_TRIAL_DAYS}-day Pro trial`,
 			"Waiter + KDS included",
 			"Single branch",
 			"Up to 30 tables",

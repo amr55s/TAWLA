@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowRight, Building2, Crown, Sparkles, Store, Zap } from "lucide-react";
 import { getRestaurantBySlug } from "@/lib/data/restaurants";
 import { PLAN_CATALOG } from "@/lib/billing/plans";
+import { PRO_TRIAL_DAYS } from "@/lib/billing/trial";
 
 const PAYWALL_PLANS = [
 	{
@@ -64,7 +65,7 @@ export default async function RestaurantSubscribePage({
 						</h1>
 
 						<p className="mt-6 max-w-xl text-base leading-7 text-[#465467] sm:text-lg">
-							{restaurant.name} has finished its 14-day Pro trial. Choose the plan
+							{restaurant.name} has finished its {PRO_TRIAL_DAYS}-day Pro trial. Choose the plan
 							that matches your floor size now, and keep the waiter, kitchen, and
 							admin workflows live without interruption.
 						</p>
@@ -163,7 +164,7 @@ export default async function RestaurantSubscribePage({
 
 									{recommended && (
 										<div className="absolute right-5 top-5 rounded-full bg-[#101828] px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white">
-											Most Balanced
+											Current Trial Plan
 										</div>
 									)}
 								</div>

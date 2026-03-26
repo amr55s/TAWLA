@@ -335,7 +335,7 @@ export function KdsBoardClient({ slug }: KdsBoardClientProps) {
 
 			{restaurant?.plan === "pro" &&
 				restaurant.max_orders_monthly != null &&
-				monthlyOrdersCount > restaurant.max_orders_monthly && (
+				monthlyOrdersCount >= restaurant.max_orders_monthly && (
 					<div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
 						<div className="font-bold">High Volume Detected</div>
 						<div className="text-xs text-amber-800">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, LockKeyhole, Sparkles, Store, Zap, Crown } from "lucide-react";
 import { PLAN_CATALOG } from "@/lib/billing/plans";
+import { PRO_TRIAL_DAYS } from "@/lib/billing/trial";
 
 const PAYWALL_PLANS = [
 	{
@@ -30,10 +31,12 @@ export function SubscriptionHardStopView({
 	slug,
 	title = "Subscription Expired",
 	description = "Admin access and ordering are frozen until billing is restored. Choose a plan to unlock the restaurant again.",
+	isTrialExpired = false,
 }: {
 	slug: string;
 	title?: string;
 	description?: string;
+	isTrialExpired?: boolean;
 }) {
 	return (
 		<div className="min-h-full bg-[#F6F1E8] text-[#101828]">
@@ -55,7 +58,9 @@ export function SubscriptionHardStopView({
 
 						<h1 className="max-w-2xl text-4xl font-black leading-[0.95] tracking-[-0.04em] text-[#101828] sm:text-5xl lg:text-6xl">
 							<span className="block text-[#0F4C75]">{title}</span>
-							<span className="block">Restore Tawla Access</span>
+							<span className="block">
+								{isTrialExpired ? "Upgrade to Pro to continue" : "Restore Tawla Access"}
+							</span>
 						</h1>
 
 						<p className="mt-6 max-w-xl text-base leading-7 text-[#465467] sm:text-lg">
@@ -78,7 +83,9 @@ export function SubscriptionHardStopView({
 									Recovery Path
 								</p>
 								<p className="mt-3 text-xl font-black tracking-[-0.03em]">
-									Choose a plan below to reopen operations immediately
+									{isTrialExpired
+										? `Your ${PRO_TRIAL_DAYS}-day Pro experience is over. Choose a paid plan to reopen operations immediately`
+										: "Choose a plan below to reopen operations immediately"}
 								</p>
 							</div>
 						</div>
@@ -99,6 +106,7 @@ export function SubscriptionHardStopView({
 							const plan = PLAN_CATALOG[entry.id];
 							const Icon = entry.icon;
 							const recommended = entry.id === "pro";
+							const isCurrentTrialPlan = isTrialExpired && entry.id === "pro";
 
 							return (
 								<div
@@ -165,7 +173,7 @@ export function SubscriptionHardStopView({
 
 									{recommended && (
 										<div className="absolute right-5 top-5 rounded-full bg-[#101828] px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white">
-											Most Balanced
+											{isCurrentTrialPlan ? "Current Trial Plan" : "Most Balanced"}
 										</div>
 									)}
 								</div>

@@ -15,6 +15,8 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, Suspense } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { PLAN_CATALOG } from "@/lib/billing/plans";
+import { PRO_TRIAL_DAYS } from "@/lib/billing/trial";
 
 const CUISINE_TYPES = [
 	"General",
@@ -35,8 +37,8 @@ const CUISINE_TYPES = [
 	"Café & Bakery",
 ];
 
-const FREE_TABLE_LIMIT = 5;
-const TABLE_PRESETS = [3, 5];
+const TRIAL_TABLE_LIMIT = PLAN_CATALOG.trial.maxTables;
+const TABLE_PRESETS = [10, 20, TRIAL_TABLE_LIMIT];
 
 const steps = [
 	{ id: 1, label: "Restaurant", icon: ChefHat },
@@ -75,7 +77,7 @@ function OnboardingInner() {
 	const [slugChecking, setSlugChecking] = useState(false);
 
 	// Step 3
-	const [tableCount, setTableCount] = useState(5);
+	const [tableCount, setTableCount] = useState(10);
 
 	// Auto-detected currency
 	const [detectedGeo, setDetectedGeo] = useState<DetectedGeo>({
@@ -162,7 +164,7 @@ function OnboardingInner() {
 	const canProceed = () => {
 		if (step === 1) return restaurantName.trim().length >= 2;
 		if (step === 2) return slug.length >= 3 && slugAvailable === true;
-		if (step === 3) return tableCount >= 1 && tableCount <= 100;
+		if (step === 3) return tableCount >= 1 && tableCount <= TRIAL_TABLE_LIMIT;
 		return false;
 	};
 
@@ -204,9 +206,6 @@ function OnboardingInner() {
 						owner_id: user.id,
 						currency_symbol: detectedGeo.symbol || "ج.م",
 						plan: "trial",
-						trial_ends_at: new Date(
-							Date.now() + 14 * 24 * 60 * 60 * 1000,
-						).toISOString(),
 						subscription_status: "trialing",
 					},
 				])
@@ -329,7 +328,7 @@ function OnboardingInner() {
 									Tell us about your restaurant
 								</h2>
 								<p className="text-sm text-[#7B8BA3] mb-8">
-									Start with the basics — you can always update later.
+									Start with the basics. Every new restaurant begins with {PRO_TRIAL_DAYS} days of Pro features for free.
 								</p>
 
 								<div className="space-y-5">
@@ -454,10 +453,10 @@ function OnboardingInner() {
 									<Sparkles size={11} /> Step 3 of 3
 								</div>
 								<h2 className="text-2xl font-bold text-[#0A1628] tracking-tight mb-2">
-									How many tables?
+									How many physical tables?
 								</h2>
 								<p className="text-sm text-[#7B8BA3] mb-8">
-									We'll set up your floor plan. You can adjust this anytime.
+									Your {PRO_TRIAL_DAYS}-day Pro trial includes up to {TRIAL_TABLE_LIMIT} tables. Choose how many tables to create now.
 								</p>
 
 								<div>
@@ -487,13 +486,13 @@ function OnboardingInner() {
 									<input
 										type="number"
 										min={1}
-										max={FREE_TABLE_LIMIT}
+										max={TRIAL_TABLE_LIMIT}
 										value={tableCount}
 										onChange={(e) =>
 											setTableCount(
 												Math.max(
 													1,
-													Math.min(FREE_TABLE_LIMIT, parseInt(e.target.value) || 1),
+													Math.min(TRIAL_TABLE_LIMIT, parseInt(e.target.value) || 1),
 												),
 											)
 										}
@@ -508,7 +507,7 @@ function OnboardingInner() {
 										<div className="flex items-start gap-2">
 											<Sparkles size={16} className="text-[#3282B8] shrink-0 mt-0.5" />
 											<p className="text-xs text-[#3D4F6F] font-medium leading-relaxed">
-												You're starting on the <span className="text-[#0F4C75] font-bold">Free Starter Plan</span> (Limit: {FREE_TABLE_LIMIT} tables). 
+												You&apos;re starting on the <span className="text-[#0F4C75] font-bold">{PRO_TRIAL_DAYS}-day Pro Trial</span> with up to {TRIAL_TABLE_LIMIT} tables and full Pro features.
 											</p>
 										</div>
 										<button

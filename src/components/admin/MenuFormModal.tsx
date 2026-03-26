@@ -1,13 +1,22 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
+import {
+	CldUploadWidget,
+	type CldUploadWidgetPropsChildren,
+	type CloudinaryUploadWidgetError,
+	type CloudinaryUploadWidgetResults,
+} from "next-cloudinary";
+import { ImagePlus, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
+import { getOptimizedImageUrl } from "@/lib/cloudinary";
 import { logger } from "@/lib/logger";
 import type { Category, MenuItem } from "@/types/database";
 
 const supabase = createClient();
+
+const CLOUDINARY_UPLOAD_PRESET = "tawla_unsigned_preset";
 
 interface FormData {
 	name_en: string;
@@ -36,6 +45,9 @@ function Field({
 	type = "text",
 	multiline = false,
 	dir,
+	placeholder,
+	required = false,
+	helpText,
 }: {
 	label: string;
 	value: string;
@@ -43,21 +55,27 @@ function Field({
 	type?: string;
 	multiline?: boolean;
 	dir?: "rtl" | "ltr";
+	placeholder?: string;
+	required?: boolean;
+	helpText?: string;
 }) {
-	const cls =
-		"w-full py-2.5 px-3 bg-background border border-border-light rounded-xl text-sm text-text-body focus:outline-none focus:border-primary transition-colors";
+	const className =
+		"w-full rounded-[22px] border border-[#D6E4F0] bg-white px-4 py-3 text-sm text-[#0A1628] placeholder:text-[#8CA0B8] shadow-[0_10px_30px_-24px_rgba(15,76,117,0.45)] transition focus:border-[#0F4C75] focus:outline-none focus:ring-4 focus:ring-[#0F4C75]/10";
+
 	return (
-		<div className="mb-4">
-			<label className="text-xs font-semibold text-text-secondary mb-1.5 block">
+		<div className="space-y-2">
+			<label className="block text-sm font-semibold text-[#10233E]">
 				{label}
+				{required ? <span className="ml-1 text-[#0F4C75]">*</span> : null}
 			</label>
 			{multiline ? (
 				<textarea
 					value={value}
 					onChange={(e) => onChange(e.target.value)}
 					dir={dir}
-					rows={3}
-					className={clsx(cls, "resize-none")}
+					rows={4}
+					placeholder={placeholder}
+					className={clsx(className, "min-h-[124px] resize-none rounded-[28px] py-4")}
 				/>
 			) : (
 				<input
@@ -65,10 +83,12 @@ function Field({
 					value={value}
 					onChange={(e) => onChange(e.target.value)}
 					dir={dir}
+					placeholder={placeholder}
 					step={type === "number" ? "0.001" : undefined}
-					className={cls}
+					className={className}
 				/>
 			)}
+			{helpText ? <p className="text-xs text-[#70839A]">{helpText}</p> : null}
 		</div>
 	);
 }
@@ -83,6 +103,35 @@ interface MenuFormModalProps {
 	onOpenCategoryCreate: () => void;
 }
 
+function extractSecureUrl(result: CloudinaryUploadWidgetResults): string | undefined {
+	if (!result || typeof result !== "object") return undefined;
+	const info = (result as { info?: unknown }).info;
+	if (!info || typeof info !== "object") return undefined;
+	const url = (info as { secure_url?: unknown }).secure_url;
+	return typeof url === "string" ? url : undefined;
+}
+
+function getUploadErrorMessage(error: CloudinaryUploadWidgetError): string {
+	if (typeof error === "string") return error;
+	if (
+		error &&
+		typeof error === "object" &&
+		"message" in error &&
+		typeof error.message === "string"
+	) {
+		return error.message;
+	}
+	if (
+		error &&
+		typeof error === "object" &&
+		"statusText" in error &&
+		typeof error.statusText === "string"
+	) {
+		return error.statusText;
+	}
+	return "Upload failed";
+}
+
 export function MenuFormModal({
 	isOpen,
 	onClose,
@@ -93,63 +142,32 @@ export function MenuFormModal({
 	onOpenCategoryCreate,
 }: MenuFormModalProps) {
 	const [form, setForm] = useState<FormData>(emptyForm);
-	const [imageFile, setImageFile] = useState<File | null>(null);
-	const [imagePreview, setImagePreview] = useState<string | null>(null);
+	const [imageUrl, setImageUrl] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
 
 	useEffect(() => {
-		if (isOpen) {
-			if (editingItem) {
-				setForm({
-					name_en: editingItem.name_en,
-					name_ar: editingItem.name_ar || "",
-					description_en: editingItem.description_en || "",
-					description_ar: editingItem.description_ar || "",
-					category_id: editingItem.category_id,
-					price: editingItem.price.toString(),
-					is_available: editingItem.is_available ?? true,
-				});
-				setImagePreview(editingItem.image_url || null);
-			} else {
-				setForm(emptyForm);
-				setImagePreview(null);
-			}
-			setImageFile(null);
-			setSaving(false);
-		}
-	}, [isOpen, editingItem]);
+		if (!isOpen) return;
 
-	const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		const file = e.target.files?.[0];
-		if (!file) return;
-		if (file.size > 5 * 1024 * 1024) {
-			toast.error("Image must be under 5MB");
-			return;
-		}
-		setImageFile(file);
-		setImagePreview(URL.createObjectURL(file));
-	};
-
-	const uploadImage = async (file: File): Promise<string | null> => {
-		const ext = file.name.split(".").pop() || "jpg";
-		const path = `items/${uuidv4()}.${ext}`;
-
-		const { error } = await supabase.storage
-			.from("menu-images")
-			.upload(path, file, { cacheControl: "3600", upsert: false });
-
-		if (error) {
-			logger.error("Upload error:", error);
-			toast.error(`Image upload failed: ${error.message}`);
-			return null;
+		if (editingItem) {
+			setForm({
+				name_en: editingItem.name_en,
+				name_ar: editingItem.name_ar || "",
+				description_en: editingItem.description_en || "",
+				description_ar: editingItem.description_ar || "",
+				category_id: editingItem.category_id,
+				price: editingItem.price.toString(),
+				is_available: editingItem.is_available ?? true,
+			});
+			setImageUrl(editingItem.image_url || null);
+		} else {
+			setForm(emptyForm);
+			setImageUrl(null);
 		}
 
-		const { data: urlData } = supabase.storage
-			.from("menu-images")
-			.getPublicUrl(path);
+		setSaving(false);
+	}, [editingItem, isOpen]);
 
-		return urlData.publicUrl;
-	};
+	const previewSrc = imageUrl ? getOptimizedImageUrl(imageUrl) : null;
 
 	const handleSave = async () => {
 		if (!form.name_en.trim() || !form.category_id || !form.price) {
@@ -160,29 +178,19 @@ export function MenuFormModal({
 		setSaving(true);
 
 		try {
-			let imageUrl = editingItem?.image_url || null;
-
-			if (imageFile) {
-				const uploaded = await uploadImage(imageFile);
-				if (uploaded) {
-					imageUrl = uploaded;
-				} else {
-					setSaving(false);
-					return;
-				}
-			}
-
 			const priceNum = parseFloat(form.price);
-			if (isNaN(priceNum) || priceNum < 0) {
+			if (Number.isNaN(priceNum) || priceNum < 0) {
 				toast.error("Invalid price value");
 				setSaving(false);
 				return;
 			}
 
+			const nameEn = form.name_en.trim();
+			const nameAr = form.name_ar.trim() || nameEn;
 			const payload = {
 				restaurant_id: restaurantId,
-				name_en: form.name_en.trim(),
-				name_ar: form.name_ar.trim() || form.name_en.trim(),
+				name_en: nameEn,
+				name_ar: nameAr,
 				description_en: form.description_en.trim() || null,
 				description_ar: form.description_ar.trim() || null,
 				category_id: form.category_id,
@@ -209,7 +217,7 @@ export function MenuFormModal({
 		} catch (err: unknown) {
 			logger.error("Menu item save error:", err);
 			const message =
-				err instanceof Error ? err.message : "Save failed — check console for details";
+				err instanceof Error ? err.message : "Save failed. Please try again.";
 			toast.error(message);
 		} finally {
 			setSaving(false);
@@ -226,194 +234,328 @@ export function MenuFormModal({
 				animate={{ opacity: 1 }}
 				exit={{ opacity: 0 }}
 				onClick={onClose}
-				className="fixed inset-0 bg-black/40 z-50"
+				className="fixed inset-0 z-50 bg-[#0A1628]/28 backdrop-blur-[2px]"
 			/>
+
 			<motion.div
 				key="menu-modal-panel"
 				initial={{ opacity: 0, y: 40 }}
 				animate={{ opacity: 1, y: 0 }}
 				exit={{ opacity: 0, y: 40 }}
 				transition={{ type: "spring", damping: 28, stiffness: 300 }}
-				className="fixed inset-x-4 top-[5vh] bottom-[5vh] md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-[540px] bg-background-card rounded-2xl z-50 shadow-float overflow-y-auto"
+				className="fixed inset-x-4 bottom-[3vh] top-[3vh] z-50 overflow-y-auto rounded-[32px] border border-[#DCE8F2] bg-white shadow-[0_40px_120px_-32px_rgba(10,22,40,0.22)] md:inset-x-auto md:left-1/2 md:w-[720px] md:-translate-x-1/2"
 			>
-				<div className="p-6">
-					<div className="flex items-center justify-between mb-6">
-						<h3 className="text-lg font-bold text-text-heading">
-							{editingItem ? "Edit Item" : "Add Item"}
-						</h3>
-						<button
-							onClick={onClose}
-							className="w-8 h-8 rounded-lg bg-border-light flex items-center justify-center text-text-secondary hover:bg-border-medium transition-colors"
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="16"
-								height="16"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-							>
-								<path d="M18 6 6 18" />
-								<path d="m6 6 12 12" />
-							</svg>
-						</button>
-					</div>
+				<div className="relative overflow-hidden">
+					<div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-[radial-gradient(circle_at_top_right,_rgba(187,225,250,0.9),_transparent_48%),linear-gradient(180deg,_rgba(240,247,252,0.92),_rgba(255,255,255,0))]" />
 
-					{/* Image upload */}
-					<div className="mb-5">
-						<label className="text-xs font-semibold text-text-secondary mb-2 block">
-							Image
-						</label>
-						<div className="relative w-full h-40 rounded-2xl overflow-hidden bg-border-light mb-2">
-							{imagePreview ? (
-								// eslint-disable-next-line @next/next/no-img-element
-								<img
-									src={imagePreview}
-									alt="Preview"
-									className="w-full h-full object-cover"
-								/>
-							) : (
-								<div className="w-full h-full flex items-center justify-center text-text-muted">
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										width="32"
-										height="32"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										strokeWidth="1.5"
-										strokeLinecap="round"
-										strokeLinejoin="round"
-									>
-										<rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-										<circle cx="9" cy="9" r="2" />
-										<path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-									</svg>
+					<div className="relative space-y-8 p-6 md:p-8">
+						<div className="flex items-start justify-between gap-4">
+							<div className="space-y-3">
+								<div className="inline-flex items-center gap-2 rounded-full border border-[#D6E4F0] bg-[#F5FAFE] px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-[#0F4C75]">
+									<Sparkles className="h-3.5 w-3.5" />
+									Menu Studio
 								</div>
-							)}
-						</div>
-						<input
-							type="file"
-							accept="image/*"
-							onChange={handleImageChange}
-							className="text-xs text-text-secondary file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 transition-colors"
-						/>
-					</div>
+								<div className="space-y-2">
+									<h3 className="font-display text-2xl text-[#0A1628] md:text-[2rem]">
+										{editingItem ? "Refine your dish details" : "Create a polished menu item"}
+									</h3>
+									<p className="max-w-2xl text-sm leading-6 text-[#5F7390]">
+										Use the same clean, premium language your guests see across the
+										Tawla experience. Add a strong image, a clear name, and the right
+										category before publishing.
+									</p>
+								</div>
+							</div>
 
-					<Field
-						label="Name (English) *"
-						value={form.name_en}
-						onChange={(v) => setForm({ ...form, name_en: v })}
-					/>
-					<Field
-						label="Name (Arabic)"
-						value={form.name_ar}
-						onChange={(v) => setForm({ ...form, name_ar: v })}
-						dir="rtl"
-					/>
-					<Field
-						label="Description (English)"
-						value={form.description_en}
-						onChange={(v) => setForm({ ...form, description_en: v })}
-						multiline
-					/>
-					<Field
-						label="Description (Arabic)"
-						value={form.description_ar}
-						onChange={(v) => setForm({ ...form, description_ar: v })}
-						multiline
-						dir="rtl"
-					/>
-
-					<div className="mb-4">
-						<div className="flex items-center justify-between mb-1.5">
-							<label className="text-xs font-semibold text-text-secondary block">
-								Category *
-							</label>
 							<button
-								onClick={() => {
-									onClose();
-									onOpenCategoryCreate();
-								}}
-								className="text-xs font-semibold text-[#0F4C75] hover:text-[#0A3558] transition-colors"
+								type="button"
+								onClick={onClose}
+								className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#D6E4F0] bg-white text-[#5C6B7A] transition hover:border-[#0F4C75]/30 hover:text-[#0F4C75]"
+								aria-label="Close menu item form"
 							>
-								+ New Category
+								<X className="h-4 w-4" />
 							</button>
 						</div>
-						<select
-							value={form.category_id}
-							onChange={(e) => setForm({ ...form, category_id: e.target.value })}
-							className="w-full py-2.5 px-3 bg-background border border-border-light rounded-xl text-sm text-text-body focus:outline-none focus:border-[#0F4C75] transition-colors"
-						>
-							<option value="">Select category</option>
-							{categories.map((c) => (
-								<option key={c.id} value={c.id}>
-									{c.name_en}
-								</option>
-							))}
-						</select>
-						{categories.length === 0 && (
-							<p className="text-xs text-red-500 mt-1.5 font-medium">
-								Please construct a category first.
-							</p>
-						)}
-					</div>
 
-					<Field
-						label="Price *"
-						value={form.price}
-						onChange={(v) => setForm({ ...form, price: v })}
-						type="number"
-					/>
+						<div className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
+							<div className="space-y-6">
+								<div className="rounded-[28px] border border-[#D6E4F0] bg-[linear-gradient(180deg,#F9FCFF_0%,#FFFFFF_100%)] p-5 shadow-[0_24px_60px_-42px_rgba(15,76,117,0.45)]">
+									<div className="mb-4 flex items-start justify-between gap-4">
+										<div>
+											<p className="text-sm font-semibold text-[#10233E]">Dish image</p>
+											<p className="mt-1 text-xs leading-5 text-[#70839A]">
+												Upload one clean hero shot. The preview stays inside the form,
+												not as a raw Cloudinary link.
+											</p>
+										</div>
+										<div className="rounded-full border border-[#DDEAF3] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#6E84A1]">
+											Cloudinary
+										</div>
+									</div>
 
-					<div className="mb-6 flex items-center gap-3">
-						<button
-							type="button"
-							role="switch"
-							aria-checked={form.is_available}
-							onClick={() => setForm({ ...form, is_available: !form.is_available })}
-							className={clsx(
-								"relative w-11 h-6 rounded-full transition-colors",
-								form.is_available ? "bg-[#0F4C75]" : "bg-border-heavy"
-							)}
-						>
-							<span
-								className={clsx(
-									"absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
-									form.is_available ? "translate-x-[22px]" : "translate-x-0.5"
-								)}
-							/>
-						</button>
-						<span className="text-sm text-text-body">Available on menu</span>
-					</div>
+									<div className="space-y-4">
+										<div className="relative overflow-hidden rounded-[28px] border border-dashed border-[#BFD5E6] bg-[#F5FAFE]">
+											{previewSrc ? (
+												<div className="relative aspect-[16/10] w-full">
+													{/* eslint-disable-next-line @next/next/no-img-element */}
+													<img
+														src={previewSrc}
+														alt="Menu item preview"
+														className="h-full w-full object-cover"
+													/>
+													<div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0A1628]/18 via-transparent to-white/10" />
+													<button
+														type="button"
+														onClick={() => setImageUrl(null)}
+														className="absolute right-4 top-4 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/92 text-[#10233E] shadow-[0_18px_34px_-18px_rgba(10,22,40,0.5)] transition hover:bg-white"
+														aria-label="Remove uploaded image"
+													>
+														<Trash2 className="h-4 w-4" />
+													</button>
+												</div>
+											) : (
+												<div className="flex aspect-[16/10] flex-col items-center justify-center gap-3 px-6 text-center">
+													<div className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-[#0F4C75] shadow-[0_18px_34px_-18px_rgba(15,76,117,0.45)]">
+														<ImagePlus className="h-7 w-7" />
+													</div>
+													<div className="space-y-1">
+														<p className="text-base font-semibold text-[#10233E]">
+															Upload a polished item photo
+														</p>
+														<p className="text-sm leading-6 text-[#70839A]">
+															Choose a bright, high-quality image that feels premium on
+															mobile and tablet.
+														</p>
+													</div>
+												</div>
+											)}
+										</div>
 
-					<div className="flex gap-3">
-						<button
-							onClick={onClose}
-							className="flex-1 py-3 rounded-xl border border-border-medium text-sm font-semibold text-text-secondary hover:bg-border-light transition-colors"
-						>
-							Cancel
-						</button>
-						<motion.button
-							whileTap={{ scale: 0.97 }}
-							onClick={handleSave}
-							disabled={saving || categories.length === 0}
-							className="flex-1 py-3 rounded-xl bg-[#0F4C75] hover:bg-[#0A3558] text-white text-sm font-semibold disabled:opacity-60 transition-colors"
-						>
-							{saving ? (
-								<div className="flex items-center justify-center gap-2">
-									<div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-									Saving...
+										<CldUploadWidget
+											uploadPreset={CLOUDINARY_UPLOAD_PRESET}
+											options={{
+												multiple: false,
+												maxFiles: 1,
+												resourceType: "image",
+											}}
+											onSuccess={(result: CloudinaryUploadWidgetResults) => {
+												const url = extractSecureUrl(result);
+												if (!url) {
+													toast.error("Upload finished, but no secure image URL was returned.");
+													return;
+												}
+												setImageUrl(url);
+												toast.success("Image uploaded successfully");
+											}}
+											onError={(err: CloudinaryUploadWidgetError) => {
+												toast.error(getUploadErrorMessage(err));
+											}}
+										>
+											{({
+												open,
+												isLoading,
+											}: CldUploadWidgetPropsChildren) => (
+												<div className="flex flex-wrap items-center gap-3">
+													<button
+														type="button"
+														onClick={() => open()}
+														disabled={isLoading}
+														className="inline-flex min-h-[50px] items-center justify-center gap-2 rounded-full bg-[#0A1628] px-5 text-sm font-semibold text-white shadow-[0_22px_44px_-24px_rgba(10,22,40,0.65)] transition hover:bg-[#102C46] disabled:cursor-not-allowed disabled:opacity-60"
+													>
+														{isLoading ? (
+															<>
+																<span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+																Opening uploader
+															</>
+														) : (
+															<>
+																<ImagePlus className="h-4 w-4" />
+																{imageUrl ? "Replace image" : "Upload image"}
+															</>
+														)}
+													</button>
+													<p className="text-xs leading-5 text-[#70839A]">
+														Upload once and the secure Cloudinary URL is stored directly on
+														the menu item record.
+													</p>
+												</div>
+											)}
+										</CldUploadWidget>
+									</div>
 								</div>
-							) : editingItem ? (
-								"Update Item"
-							) : (
-								"Create Item"
-							)}
-						</motion.button>
+
+								<div className="grid gap-6 md:grid-cols-2">
+									<Field
+										label="Name (English)"
+										required
+										value={form.name_en}
+										onChange={(v) => setForm({ ...form, name_en: v })}
+										placeholder="Classic burger"
+									/>
+									<Field
+										label="Price"
+										required
+										value={form.price}
+										onChange={(v) => setForm({ ...form, price: v })}
+										type="number"
+										placeholder="0.000"
+										helpText="Use your store currency format. Decimal values are supported."
+									/>
+								</div>
+
+								<div className="grid gap-6 md:grid-cols-2">
+									<Field
+										label="الاسم (عربي)"
+										value={form.name_ar}
+										onChange={(v) => setForm({ ...form, name_ar: v })}
+										dir="rtl"
+										placeholder="برجر كلاسيك"
+									/>
+									<div className="space-y-2">
+										<div className="flex items-center justify-between gap-3">
+											<label className="block text-sm font-semibold text-[#10233E]">
+												Category<span className="ml-1 text-[#0F4C75]">*</span>
+											</label>
+											<button
+												type="button"
+												onClick={() => {
+													onClose();
+													onOpenCategoryCreate();
+												}}
+												className="text-xs font-semibold text-[#0F4C75] transition hover:text-[#0A3558]"
+											>
+												+ New category
+											</button>
+										</div>
+										<select
+											value={form.category_id}
+											onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+											className="w-full rounded-[22px] border border-[#D6E4F0] bg-white px-4 py-3 text-sm text-[#0A1628] shadow-[0_10px_30px_-24px_rgba(15,76,117,0.45)] transition focus:border-[#0F4C75] focus:outline-none focus:ring-4 focus:ring-[#0F4C75]/10"
+										>
+											<option value="">Select category</option>
+											{categories.map((category) => (
+												<option key={category.id} value={category.id}>
+													{category.name_en}
+												</option>
+											))}
+										</select>
+										{categories.length === 0 ? (
+											<p className="text-xs font-medium text-[#C25E3D]">
+												Create a category first before saving this item.
+											</p>
+										) : (
+											<p className="text-xs text-[#70839A]">
+												Choose the collection where guests should find this dish.
+											</p>
+										)}
+									</div>
+								</div>
+
+								<Field
+									label="Description (English)"
+									value={form.description_en}
+									onChange={(v) => setForm({ ...form, description_en: v })}
+									multiline
+									placeholder="A concise description that helps guests choose quickly."
+								/>
+
+								<Field
+									label="الوصف (عربي)"
+									value={form.description_ar}
+									onChange={(v) => setForm({ ...form, description_ar: v })}
+									multiline
+									dir="rtl"
+									placeholder="وصف مختصر وواضح للصنف"
+								/>
+							</div>
+
+							<div className="space-y-6">
+								<div className="rounded-[28px] border border-[#D6E4F0] bg-white p-5 shadow-[0_24px_60px_-42px_rgba(15,76,117,0.45)]">
+									<p className="text-sm font-semibold text-[#10233E]">Availability</p>
+									<p className="mt-1 text-xs leading-5 text-[#70839A]">
+										Toggle whether the dish appears immediately on the guest menu.
+									</p>
+
+									<div className="mt-5 rounded-[24px] border border-[#E3EDF5] bg-[#F8FBFE] p-4">
+										<div className="flex items-start justify-between gap-4">
+											<div>
+												<p className="text-sm font-semibold text-[#10233E]">
+													Visible to guests
+												</p>
+												<p className="mt-1 text-xs leading-5 text-[#70839A]">
+													Turn this off for sold-out items, seasonal dishes, or menu drafts.
+												</p>
+											</div>
+											<button
+												type="button"
+												role="switch"
+												aria-checked={form.is_available}
+												onClick={() =>
+													setForm({ ...form, is_available: !form.is_available })
+												}
+												className={clsx(
+													"relative h-7 w-12 rounded-full transition",
+													form.is_available ? "bg-[#0F4C75]" : "bg-[#C7D4E2]",
+												)}
+											>
+												<span
+													className={clsx(
+														"absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform",
+														form.is_available ? "translate-x-6" : "translate-x-1",
+													)}
+												/>
+											</button>
+										</div>
+										<div className="mt-4 inline-flex rounded-full border border-[#DCE8F2] bg-white px-3 py-1.5 text-xs font-semibold text-[#0F4C75]">
+											{form.is_available ? "Currently available" : "Hidden from guests"}
+										</div>
+									</div>
+								</div>
+
+								<div className="rounded-[28px] border border-[#D6E4F0] bg-[linear-gradient(180deg,#FFFFFF_0%,#F8FBFE_100%)] p-5 shadow-[0_24px_60px_-42px_rgba(15,76,117,0.45)]">
+									<p className="text-sm font-semibold text-[#10233E]">Publishing notes</p>
+									<ul className="mt-4 space-y-3 text-sm leading-6 text-[#5F7390]">
+										<li className="rounded-[20px] border border-[#E3EDF5] bg-white px-4 py-3">
+											Use one strong, well-lit image instead of multiple inconsistent angles.
+										</li>
+										<li className="rounded-[20px] border border-[#E3EDF5] bg-white px-4 py-3">
+											Keep titles short. Most guests scan menu cards quickly on mobile.
+										</li>
+										<li className="rounded-[20px] border border-[#E3EDF5] bg-white px-4 py-3">
+											Write descriptions that explain taste or ingredients, not generic filler.
+										</li>
+									</ul>
+								</div>
+							</div>
+						</div>
+
+						<div className="flex flex-col-reverse gap-3 border-t border-[#E7EEF5] pt-6 sm:flex-row sm:justify-end">
+							<button
+								type="button"
+								onClick={onClose}
+								className="inline-flex min-h-[52px] items-center justify-center rounded-full border border-[#D6E4F0] bg-white px-6 text-sm font-semibold text-[#4F647F] transition hover:border-[#0F4C75]/20 hover:text-[#0F4C75]"
+							>
+								Cancel
+							</button>
+							<motion.button
+								type="button"
+								whileTap={{ scale: 0.985 }}
+								onClick={handleSave}
+								disabled={saving || categories.length === 0}
+								className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-full bg-[#0A1628] px-6 text-sm font-semibold text-white shadow-[0_24px_46px_-24px_rgba(10,22,40,0.7)] transition hover:bg-[#102C46] disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								{saving ? (
+									<>
+										<span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+										Saving item
+									</>
+								) : editingItem ? (
+									"Save changes"
+								) : (
+									"Create item"
+								)}
+							</motion.button>
+						</div>
 					</div>
 				</div>
 			</motion.div>

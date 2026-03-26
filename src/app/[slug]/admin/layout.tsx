@@ -34,6 +34,7 @@ import { createClient } from "@/lib/supabase/client";
 import { SubscriptionHardStopView } from "@/components/billing/SubscriptionHardStopView";
 import { LogoBrand } from "@/components/ui/LogoBrand";
 import { clearStaffSession } from "@/app/actions/staff-auth";
+import { getTrialDaysRemaining, PRO_TRIAL_DAYS } from "@/lib/billing/trial";
 
 function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 	const pathname = usePathname();
@@ -233,6 +234,8 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 	const navDisabledClass = isExpired ? "pointer-events-none opacity-40 grayscale" : "";
 	const shouldShowHardStop =
 		!pathname.startsWith("/super-admin") && isExpired && !isSafeAdminPage;
+	const trialDaysLeft = getTrialDaysRemaining(trialEndsAt);
+	const shouldShowTrialBanner = plan === "trial" && !shouldShowHardStop && trialEndsAt;
 
 	useEffect(() => {
 		if (!isExpired) return;
@@ -568,10 +571,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 							<div className="flex items-center gap-3 relative">
 								{/* Trial Badge */}
 								{plan === "trial" && trialEndsAt && (() => {
-									const daysLeft = Math.ceil(
-										(new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-									);
-									const isUrgent = daysLeft <= 3;
+									const isUrgent = trialDaysLeft <= 3;
 									return (
 										<div
 											className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-colors ${isUrgent
@@ -580,7 +580,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 												}`}
 										>
 											<Sparkles size={14} />
-											Trial: {daysLeft > 0 ? `${daysLeft} day${daysLeft !== 1 ? "s" : ""} left` : "Expired"}
+											Trialing: {trialDaysLeft > 0 ? `${trialDaysLeft} day${trialDaysLeft !== 1 ? "s" : ""} left` : "Expired"}
 										</div>
 									);
 								})()}
@@ -840,15 +840,41 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 
 					{/* Main Content */}
 					<main className={`flex-1 overflow-y-auto ${shouldShowHardStop ? "" : "p-5 lg:p-8"}`}>
+						{shouldShowTrialBanner && (
+							<div className="mb-5 rounded-[28px] border border-[#BBE1FA] bg-[linear-gradient(135deg,#F7FBFE_0%,#FFFFFF_100%)] px-5 py-4 shadow-[0_18px_50px_rgba(15,76,117,0.08)]">
+								<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+									<div className="flex items-start gap-3">
+										<div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-[#0F4C75] text-white">
+											<Sparkles size={16} />
+										</div>
+										<div>
+											<p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#0F4C75]">
+												Pro Trial Active
+											</p>
+											<p className="mt-1 text-sm font-semibold text-[#0A1628]">
+												You are enjoying {PRO_TRIAL_DAYS} days of Pro features for free. Your trial ends in {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""}.
+											</p>
+										</div>
+									</div>
+									<Link
+										href={`/${slug}/admin/settings/billing`}
+										className="inline-flex items-center justify-center rounded-full bg-[#0F4C75] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#0A3558]"
+									>
+										Review Upgrade Options
+									</Link>
+								</div>
+							</div>
+						)}
 						{shouldShowHardStop ? (
 							<SubscriptionHardStopView
 								slug={slug}
 								title={plan === "trial" ? "Trial Expired" : "Subscription Inactive"}
 								description={
 									plan === "trial"
-										? "Your trial has ended. Admin access and guest ordering are now frozen until a paid plan is activated."
+										? "Your complimentary Pro trial has ended. Upgrade to Pro to restore dashboard access, menu ordering, and checkout immediately."
 										: "Your subscription is no longer active. Admin access and guest ordering are frozen until billing is restored."
 								}
+								isTrialExpired={plan === "trial"}
 							/>
 						) : (
 							children

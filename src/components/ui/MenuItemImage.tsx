@@ -2,7 +2,9 @@
 
 import { clsx } from "clsx";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import { getOptimizedImageUrl } from "@/lib/cloudinary";
 
 interface MenuItemImageProps {
 	src: string | null | undefined;
@@ -45,19 +47,23 @@ export function MenuItemImage({
 	priority = false,
 }: MenuItemImageProps) {
 	const [hasError, setHasError] = useState(false);
+	const displaySrc = useMemo(
+		() => (src?.trim() ? getOptimizedImageUrl(src.trim()) : ""),
+		[src],
+	);
 
 	useEffect(() => {
 		// Reset error state whenever the image source changes
 		setHasError(false);
 	}, [src]);
 
-	if (!src || src.trim() === "" || hasError) {
+	if (!displaySrc || hasError) {
 		return <Placeholder />;
 	}
 
 	return (
 		<Image
-			src={src}
+			src={displaySrc}
 			alt={alt}
 			fill={fill}
 			sizes={sizes}

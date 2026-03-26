@@ -549,7 +549,7 @@ export default function AdminSettingsPage() {
 							value={tableCount}
 							onChange={(e) => setTableCount(Number(e.target.value))}
 							className="w-full py-2.5 px-3 bg-[#F8FAFC] border border-[#E8ECF1] rounded-xl text-sm text-[#0A1628] focus:outline-none focus:ring-2 focus:ring-[#0F4C75]/20 focus:border-[#0F4C75] transition-colors"
-							placeholder="e.g. 15"
+							placeholder={`e.g. ${restaurant?.max_tables ?? PLAN_CATALOG.trial.maxTables}`}
 						/>
 						<p className="text-[11px] text-[#64748B] mt-1.5">
 							{tableCount > currentTableCount

@@ -206,12 +206,12 @@ export default function AdminStaffPage() {
 
 			{/* Quick Access Portals */}
 			<div className="bg-white rounded-2xl border border-[#E8ECF1] p-5 overflow-hidden shadow-sm">
-				<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-					
+				<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
 					{/* Cashier Portal */}
-					<div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-slate-100/60 hover:border-blue-100 transition-colors group">
+					<div className="flex items-center justify-between p-4 rounded-xl bg-white border border-[#E8ECF1] hover:border-[#0F4C75]/30 transition-colors group">
 						<div className="flex items-center gap-3.5">
-							<div className="w-10 h-10 rounded-xl bg-blue-100/50 text-blue-600 flex items-center justify-center">
+							<div className="w-10 h-10 rounded-xl bg-[#0F4C75]/10 text-[#0A1628] flex items-center justify-center">
 								<Monitor size={18} />
 							</div>
 							<div>
@@ -245,9 +245,9 @@ export default function AdminStaffPage() {
 					</div>
 
 					{/* Waiter Portal */}
-					<div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-slate-100/60 hover:border-orange-100 transition-colors group">
+					<div className="flex items-center justify-between p-4 rounded-xl bg-white border border-[#E8ECF1] hover:border-[#0F4C75]/30 transition-colors group">
 						<div className="flex items-center gap-3.5">
-							<div className="w-10 h-10 rounded-xl bg-orange-100/50 text-orange-600 flex items-center justify-center">
+							<div className="w-10 h-10 rounded-xl bg-[#0F4C75]/10 text-[#0A1628] flex items-center justify-center">
 								<Smartphone size={18} />
 							</div>
 							<div>
@@ -274,6 +274,42 @@ export default function AdminStaffPage() {
 								}}
 								className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#0F4C75] text-white hover:bg-[#0A3558] transition-colors shadow-sm"
 								title="Open Portal"
+							>
+								<ExternalLink size={14} />
+							</button>
+						</div>
+					</div>
+
+					{/* KDS Portal */}
+					<div className="flex items-center justify-between p-4 rounded-xl bg-white border border-[#E8ECF1] hover:border-[#0F4C75]/30 transition-colors group">
+						<div className="flex items-center gap-3.5">
+							<div className="w-10 h-10 rounded-xl bg-[#0F4C75]/10 text-[#0A1628] flex items-center justify-center">
+								<Monitor size={18} />
+							</div>
+							<div>
+								<p className="text-sm font-bold text-[#0A1628]">Kitchen Display (KDS)</p>
+								<p className="text-[11px] font-medium text-[#7B8BA3]">Device login URL</p>
+							</div>
+						</div>
+						<div className="flex items-center gap-2">
+							<button
+								onClick={() => {
+									const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/${slug}/kds`;
+									navigator.clipboard.writeText(url);
+									toast.success("KDS URL copied to clipboard");
+								}}
+								className="p-2 rounded-lg text-[#94A3B8] hover:bg-white hover:text-[#0F4C75] hover:shadow-sm border border-transparent hover:border-gray-200 transition-all"
+								title="Copy Link"
+							>
+								<Copy size={16} />
+							</button>
+							<button
+								onClick={() => {
+									const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/${slug}/kds`;
+									window.open(url, "_blank");
+								}}
+								className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#0F4C75] text-white hover:bg-[#0A3558] transition-colors shadow-sm"
+								title="Open KDS"
 							>
 								<ExternalLink size={14} />
 							</button>
@@ -347,8 +383,8 @@ export default function AdminStaffPage() {
 										<div className="flex items-center gap-2 mt-0.5">
 											<span
 												className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.role === "waiter"
-														? "bg-blue-50 text-[#3282B8]"
-														: "bg-amber-50 text-amber-600"
+													? "bg-blue-50 text-[#3282B8]"
+													: "bg-amber-50 text-amber-600"
 													}`}
 											>
 												{s.role.charAt(0).toUpperCase() + s.role.slice(1)}
@@ -458,8 +494,8 @@ export default function AdminStaffPage() {
 													type="button"
 													onClick={() => setRole(r)}
 													className={`flex-1 py-2.5 rounded-xl text-xs font-semibold capitalize transition-all ${role === r
-															? "bg-[#0F4C75] text-white shadow-sm"
-															: "bg-[#F5F7FA] text-[#5A6B82] border border-[#E8ECF1] hover:border-[#3282B8]/40"
+														? "bg-[#0F4C75] text-white shadow-sm"
+														: "bg-[#F5F7FA] text-[#5A6B82] border border-[#E8ECF1] hover:border-[#3282B8]/40"
 														}`}
 												>
 													{r}

@@ -12,6 +12,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { PLAN_CATALOG, type RestaurantPlan } from "@/lib/billing/plans";
+import { getTrialDaysRemaining, PRO_TRIAL_DAYS } from "@/lib/billing/trial";
 
 interface RestaurantBilling {
 	plan: RestaurantPlan | null;
@@ -64,13 +65,7 @@ export default function BillingPage() {
 	const isPro = plan === "pro" || plan === "enterprise";
 
 	const trialDaysLeft = billing?.trial_ends_at
-		? Math.max(
-				0,
-				Math.ceil(
-					(new Date(billing.trial_ends_at).getTime() - Date.now()) /
-						(1000 * 60 * 60 * 24),
-				),
-			)
+		? getTrialDaysRemaining(billing.trial_ends_at)
 		: null;
 
 	const periodEnd = billing?.current_period_end
@@ -174,8 +169,8 @@ export default function BillingPage() {
 					<div className="mt-5 flex items-center gap-3 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
 						<Sparkles size={16} className="text-amber-600 shrink-0" />
 						<p className="text-xs text-amber-700 font-medium">
-							You&apos;re on a free trial with full Pro access. Subscribe before
-							your trial ends to keep all features.
+							You&apos;re enjoying {PRO_TRIAL_DAYS} days of Pro features for free. Subscribe before
+							your trial ends to keep everything unlocked.
 						</p>
 					</div>
 				)}

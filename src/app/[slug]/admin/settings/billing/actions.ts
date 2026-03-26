@@ -17,7 +17,7 @@ export async function mockSubscribe(restaurantId: string, planId: string) {
 
 	const { data: restaurant } = await supabase
 		.from("restaurants")
-		.select("owner_id")
+		.select("owner_id, slug")
 		.eq("id", restaurantId)
 		.maybeSingle();
 
@@ -27,7 +27,7 @@ export async function mockSubscribe(restaurantId: string, planId: string) {
 
 	// Simulate successful payment — upgrade to Pro
 	const currentPeriodEnd = new Date();
-	currentPeriodEnd.setDate(currentPeriodEnd.getDate() + 30);
+	currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
 
 	const { error } = await supabase
 		.from("restaurants")
@@ -46,5 +46,9 @@ export async function mockSubscribe(restaurantId: string, planId: string) {
 	}
 
 	revalidatePath("/", "layout");
+	if (restaurant.slug) {
+		revalidatePath(`/${restaurant.slug}/admin`, "layout");
+		revalidatePath(`/${restaurant.slug}/admin/settings/billing`, "page");
+	}
 	return { success: true };
 }
