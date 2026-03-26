@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { isSuperAdminUser } from '@/lib/auth/super-admin';
 
 const AUTH_ROUTES = ['/login', '/register', '/onboarding'];
+const NEVER_REDIRECT_ROUTES = ['/', '/login'];
 const BYPASS_PREFIXES = ['/api', '/_next'];
 const STATIC_ASSET_REGEX = /\.[^/]+$/;
 const TRIAL_SAFE_ROUTE_PATTERNS = [
@@ -36,6 +37,10 @@ function isPublicRedirectRoute(pathname: string): boolean {
   return pathname === '/';
 }
 
+function isNeverRedirectRoute(pathname: string): boolean {
+  return NEVER_REDIRECT_ROUTES.some((route) => pathname === route);
+}
+
 function isBypassedPath(pathname: string): boolean {
   if (BYPASS_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
     return true;
@@ -52,7 +57,7 @@ export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
   const { pathname } = request.nextUrl;
 
-  if (isBypassedPath(pathname)) {
+  if (isBypassedPath(pathname) || isNeverRedirectRoute(pathname)) {
     return supabaseResponse;
   }
 
@@ -89,7 +94,12 @@ export async function middleware(request: NextRequest) {
   const isSuperAdmin = isSuperAdminUser(user);
 
   // ── Super Admin shortcut: redirect super admin to /super-admin ──
-  if (user && isSuperAdmin && (isAuthRoute(pathname) || isPublicRedirectRoute(pathname))) {
+  if (
+    user &&
+    isSuperAdmin &&
+    isAuthRoute(pathname) &&
+    !isNeverRedirectRoute(pathname)
+  ) {
     return NextResponse.redirect(new URL('/super-admin', request.url));
   }
 
@@ -166,7 +176,11 @@ export async function middleware(request: NextRequest) {
   }
 
   // ── Authenticated users visiting auth/public routes → redirect to /{slug}/admin ──
-  if (user && (isAuthRoute(pathname) || isPublicRedirectRoute(pathname))) {
+  if (
+    user &&
+    (isAuthRoute(pathname) || isPublicRedirectRoute(pathname)) &&
+    !isNeverRedirectRoute(pathname)
+  ) {
     // Resolve slug for redirect
     const { data: restaurants } = await supabase
       .from('restaurants')

@@ -18,7 +18,12 @@ export function isRestaurantExpired({
 		new Date(trialEndsAt as string).getTime() < Date.now();
 
 	const isPaidPlanExpired =
-		Boolean(plan && plan !== "trial") && subscriptionStatus !== "active";
+		Boolean(
+			plan &&
+				plan !== "trial" &&
+				subscriptionStatus &&
+				subscriptionStatus !== "active",
+		);
 
 	return Boolean(isTrialExpired || isPaidPlanExpired);
 }

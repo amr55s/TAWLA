@@ -227,11 +227,12 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 	const [branches, setBranches] = useState<
 		Array<{ id: string; name: string; slug: string; parent_id: string | null }>
 	>([]);
-	const isExpiredRecoveryPage =
-		pathname.includes("/settings/billing") ||
-		pathname.includes("/settings/checkout");
+	const isSafeAdminPage =
+		pathname.startsWith(`${basePath}/settings/billing`) ||
+		pathname.startsWith(`${basePath}/settings/checkout`);
 	const navDisabledClass = isExpired ? "pointer-events-none opacity-40 grayscale" : "";
-	const shouldShowHardStop = isExpired && !isExpiredRecoveryPage;
+	const shouldShowHardStop =
+		!pathname.startsWith("/super-admin") && isExpired && !isSafeAdminPage;
 
 	useEffect(() => {
 		if (!isExpired) return;
