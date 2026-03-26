@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { LogoBrand } from "@/components/ui/LogoBrand";
 import { setStaffSession } from "@/app/actions/staff-auth";
+import { isSuperAdminUser } from "@/lib/auth/super-admin";
 
 function LoginInner() {
 	const router = useRouter();
@@ -91,7 +92,7 @@ function LoginInner() {
 
 		router.refresh();
 
-		if (user.email === "amrkhaled.contact@gmail.com") {
+		if (isSuperAdminUser(user)) {
 			router.push("/super-admin");
 			return;
 		}
@@ -310,4 +311,3 @@ export default function LoginPage() {
 		</Suspense>
 	);
 }
-

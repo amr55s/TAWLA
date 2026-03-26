@@ -18,11 +18,13 @@ interface NavItem {
 interface FloatingNavBarProps {
 	restaurantSlug: string;
 	cartCount?: number;
+	orderingDisabled?: boolean;
 }
 
 export function FloatingNavBar({
 	restaurantSlug,
 	cartCount = 0,
+	orderingDisabled = false,
 }: FloatingNavBarProps) {
 	const pathname = usePathname();
 	const [isWaiterOpen, setIsWaiterOpen] = useState(false);
@@ -142,9 +144,12 @@ export function FloatingNavBar({
 									<Link
 										key={item.href}
 										href={item.href}
+										aria-disabled={orderingDisabled && isCart}
+										tabIndex={orderingDisabled && isCart ? -1 : 0}
 										className={clsx(
 											"relative flex flex-col items-center justify-center gap-0.5 w-[68px] h-[52px] rounded-[28px] transition-all duration-300",
 											active ? "bg-white/50 shadow-sm" : "hover:bg-white/30",
+											orderingDisabled && isCart && "pointer-events-none opacity-45",
 										)}
 									>
 										<motion.div

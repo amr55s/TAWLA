@@ -11,6 +11,7 @@ interface ItemDetailSheetProps {
 	onClose: () => void;
 	onAddToCart: (item: MenuItem, quantity: number) => void;
 	locale?: "en" | "ar";
+	disabled?: boolean;
 }
 
 export function ItemDetailSheet({
@@ -19,6 +20,7 @@ export function ItemDetailSheet({
 	onClose,
 	onAddToCart,
 	locale = "en",
+	disabled = false,
 }: ItemDetailSheetProps) {
 	const [quantity, setQuantity] = useState(1);
 
@@ -30,6 +32,7 @@ export function ItemDetailSheet({
 	const totalPrice = (item.price * quantity).toFixed(3);
 
 	const handleAddToCart = () => {
+		if (disabled) return;
 		onAddToCart(item, quantity);
 		setQuantity(1);
 		onClose();
@@ -127,11 +130,18 @@ export function ItemDetailSheet({
 							<motion.button
 								whileTap={{ scale: 0.98 }}
 								onClick={handleAddToCart}
-								className="w-full py-4 bg-primary rounded-2xl text-white text-base font-bold flex items-center justify-center gap-2 transition-colors active:bg-primary/90"
+								disabled={disabled}
+								className="w-full py-4 bg-primary rounded-2xl text-white text-base font-bold flex items-center justify-center gap-2 transition-colors active:bg-primary/90 disabled:cursor-not-allowed disabled:bg-[#B0B8C4]"
 							>
-								<span>Add to Cart</span>
-								<span>•</span>
-								<span style={{ direction: "ltr" }}>{totalPrice} KD</span>
+								{disabled ? (
+									<span>Ordering is unavailable</span>
+								) : (
+									<>
+										<span>Add to Cart</span>
+										<span>•</span>
+										<span style={{ direction: "ltr" }}>{totalPrice} KD</span>
+									</>
+								)}
 							</motion.button>
 						</div>
 					</motion.div>

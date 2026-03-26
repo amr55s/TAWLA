@@ -12,6 +12,7 @@ import {
 	getRestaurantBySlugClient,
 	getTableByNumberClient,
 } from "@/lib/data/orders.client";
+import { isRestaurantOrderingUnavailable } from "@/lib/billing/subscription-status";
 import { useCartStore } from "@/store/cart";
 
 const SERVICE_FEE_PERCENTAGE = 10;
@@ -29,6 +30,7 @@ export default function CheckoutPage({
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [navigatingToOrders, setNavigatingToOrders] = useState(false);
 	const [showSuccess, setShowSuccess] = useState(false);
+	const [orderingUnavailable, setOrderingUnavailable] = useState(false);
 	const isSubmittingRef = useRef(false);
 
 	const {
@@ -46,8 +48,34 @@ export default function CheckoutPage({
 	const serviceFee = getServiceFee(SERVICE_FEE_PERCENTAGE);
 	const total = getTotal(SERVICE_FEE_PERCENTAGE);
 
+	useEffect(() => {
+		let cancelled = false;
+
+		(async () => {
+			const restaurant = await getRestaurantBySlugClient(slug);
+			if (!restaurant || cancelled) return;
+
+			setOrderingUnavailable(
+				isRestaurantOrderingUnavailable({
+					plan: restaurant.plan,
+					trialEndsAt: restaurant.trial_ends_at,
+					subscriptionStatus: restaurant.subscription_status,
+					isActive: restaurant.is_active,
+				}),
+			);
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [slug]);
+
 	const handlePlaceOrder = async () => {
 		if (isSubmittingRef.current) return;
+		if (orderingUnavailable) {
+			toast.error("Ordering is currently unavailable for this restaurant.");
+			return;
+		}
 		if (!tableNumber) {
 			toast.error("No table selected. Please go back and select a table.");
 			return;
@@ -60,6 +88,17 @@ export default function CheckoutPage({
 			const restaurant = await getRestaurantBySlugClient(slug);
 			if (!restaurant) {
 				toast.error("Restaurant not found");
+				return;
+			}
+			if (
+				isRestaurantOrderingUnavailable({
+					plan: restaurant.plan,
+					trialEndsAt: restaurant.trial_ends_at,
+					subscriptionStatus: restaurant.subscription_status,
+					isActive: restaurant.is_active,
+				})
+			) {
+				toast.error("Ordering is currently unavailable for this restaurant.");
 				return;
 			}
 
@@ -349,21 +388,27 @@ export default function CheckoutPage({
 
 				{/* Place Order Button */}
 				<div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border-light px-5 pt-4 pb-6 safe-bottom">
-					<motion.button
-						whileTap={{ scale: 0.98 }}
-						onClick={handlePlaceOrder}
-						disabled={isSubmitting}
-						className="w-full py-4 bg-primary rounded-2xl text-white text-base font-bold transition-colors active:bg-primary/90 disabled:opacity-70 flex items-center justify-center gap-2"
-					>
-						{isSubmitting ? (
-							<div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
-						) : (
-							<>
-								Confirm Order
-								<span>✓</span>
-							</>
-						)}
-					</motion.button>
+					{orderingUnavailable ? (
+						<div className="w-full rounded-2xl border border-[#F3C4A7] bg-[#FFF5EC] px-5 py-4 text-center text-sm font-semibold text-[#9A4D18]">
+							Ordering is currently unavailable for this restaurant.
+						</div>
+					) : (
+						<motion.button
+							whileTap={{ scale: 0.98 }}
+							onClick={handlePlaceOrder}
+							disabled={isSubmitting}
+							className="w-full py-4 bg-primary rounded-2xl text-white text-base font-bold transition-colors active:bg-primary/90 disabled:opacity-70 flex items-center justify-center gap-2"
+						>
+							{isSubmitting ? (
+								<div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+							) : (
+								<>
+									Confirm Order
+									<span>✓</span>
+								</>
+							)}
+						</motion.button>
+					)}
 				</div>
 			</div>
 		</>

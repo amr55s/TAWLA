@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getPlanDefinition, isPaidPlanId } from "@/lib/billing/plans";
+import { isRestaurantExpired } from "@/lib/billing/subscription-status";
 
 export async function checkSubscriptionStatus(restaurantId: string) {
 	const supabase = await createClient();
@@ -21,7 +22,7 @@ export async function checkSubscriptionStatus(restaurantId: string) {
 	const { data: restaurant, error } = await supabase
 		.from("restaurants")
 		.select(
-			"id, owner_id, slug, plan, trial_ends_at, is_active, max_tables, max_orders_monthly",
+			"id, owner_id, slug, plan, subscription_status, trial_ends_at, is_active, max_tables, max_orders_monthly",
 		)
 		.eq("id", restaurantId)
 		.maybeSingle();
@@ -42,11 +43,11 @@ export async function checkSubscriptionStatus(restaurantId: string) {
 		};
 	}
 
-	const isTrial = restaurant.plan === "trial";
-	const isExpired =
-		isTrial &&
-		Boolean(restaurant.trial_ends_at) &&
-		new Date(restaurant.trial_ends_at).getTime() < Date.now();
+	const isExpired = isRestaurantExpired({
+		plan: restaurant.plan,
+		trialEndsAt: restaurant.trial_ends_at,
+		subscriptionStatus: restaurant.subscription_status,
+	});
 
 	return {
 		ok: true,

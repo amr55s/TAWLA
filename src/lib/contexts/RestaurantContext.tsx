@@ -9,15 +9,32 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import type { RestaurantPlan } from "@/lib/billing/plans";
+import { isRestaurantExpired } from "@/lib/billing/subscription-status";
+
+type RestaurantRecord = {
+	id: string;
+	slug: string;
+	plan: RestaurantPlan | null;
+	subscription_status: string | null;
+	trial_ends_at: string | null;
+	is_active: boolean | null;
+	currency_symbol?: string | null;
+	is_master?: boolean | null;
+	parent_id?: string | null;
+	max_tables?: number | null;
+	max_orders_monthly?: number | null;
+};
 
 interface RestaurantContextType {
 	restaurantId: string | null;
 	slug: string | null;
 	loading: boolean;
 	error: string | null;
-	plan: "trial" | "starter" | "pro" | "enterprise" | null;
+	plan: RestaurantPlan | null;
 	subscriptionStatus: string | null;
 	trialEndsAt: string | null;
+	isExpired: boolean;
 	isActive: boolean | null;
 	isMaster: boolean;
 	parentId: string | null;
@@ -34,6 +51,7 @@ const RestaurantContext = createContext<RestaurantContextType>({
 	plan: null,
 	subscriptionStatus: null,
 	trialEndsAt: null,
+	isExpired: false,
 	isActive: null,
 	isMaster: false,
 	parentId: null,
@@ -55,7 +73,7 @@ export function RestaurantProvider({
 	const [slug, setSlug] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
-	const [plan, setPlan] = useState<"trial" | "starter" | "pro" | "enterprise" | null>(null);
+	const [plan, setPlan] = useState<RestaurantPlan | null>(null);
 	const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
 	const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
 	const [isActive, setIsActive] = useState<boolean | null>(null);
@@ -66,6 +84,26 @@ export function RestaurantProvider({
 	const [currencySymbol, setCurrencySymbol] = useState<string>("EGP");
 
 	const router = useRouter();
+	const isExpired = isRestaurantExpired({
+		plan,
+		trialEndsAt,
+		subscriptionStatus,
+	});
+
+	const applyRestaurantRecord = (record: RestaurantRecord) => {
+		setPlan(record.plan ?? null);
+		setSubscriptionStatus(
+			record.subscription_status ??
+				(record.plan === "trial" ? "trialing" : record.plan ? "active" : null),
+		);
+		setTrialEndsAt(record.trial_ends_at ?? null);
+		setIsActive(record.is_active ?? null);
+		setIsMaster(Boolean(record.is_master));
+		setParentId((record.parent_id as string | null) ?? null);
+		setMaxTables((record.max_tables as number | null) ?? null);
+		setMaxOrdersMonthly((record.max_orders_monthly as number | null) ?? null);
+		setCurrencySymbol(record.currency_symbol || "EGP");
+	};
 
 	useEffect(() => {
 		let mounted = true;
@@ -73,6 +111,11 @@ export function RestaurantProvider({
 		const fetchRestaurant = async () => {
 			let currentSlug: string | null = initialSlug || null;
 			try {
+				if (mounted) {
+					setLoading(true);
+					setError(null);
+				}
+
 				const {
 					data: { user },
 					error: authError,
@@ -113,18 +156,7 @@ export function RestaurantProvider({
 					currentRestId = data.id;
 					currentSlug = data.slug;
 					if (mounted) {
-						setPlan((data.plan as "trial" | "starter" | "pro" | "enterprise" | null) ?? null);
-						setSubscriptionStatus(
-							data.subscription_status ??
-								(data.plan === "trial" ? "trialing" : data.plan ? "active" : null),
-						);
-						setTrialEndsAt(data.trial_ends_at ?? null);
-						setIsActive(data.is_active ?? null);
-						setIsMaster(Boolean(data.is_master));
-						setParentId((data.parent_id as string | null) ?? null);
-						setMaxTables((data.max_tables as number | null) ?? null);
-						setMaxOrdersMonthly((data.max_orders_monthly as number | null) ?? null);
-						setCurrencySymbol((data as any).currency_symbol || "EGP");
+						applyRestaurantRecord(data as RestaurantRecord);
 					}
 				} else {
 					// Fallback if no initialSlug provided
@@ -145,18 +177,7 @@ export function RestaurantProvider({
 						currentRestId = data[0].id;
 						currentSlug = data[0].slug;
 						if (mounted) {
-							setPlan((data[0].plan as "trial" | "starter" | "pro" | "enterprise" | null) ?? null);
-							setSubscriptionStatus(
-								data[0].subscription_status ??
-									(data[0].plan === "trial" ? "trialing" : data[0].plan ? "active" : null),
-							);
-							setTrialEndsAt(data[0].trial_ends_at ?? null);
-							setIsActive(data[0].is_active ?? null);
-							setIsMaster(Boolean(data[0].is_master));
-							setParentId((data[0].parent_id as string | null) ?? null);
-							setMaxTables((data[0].max_tables as number | null) ?? null);
-							setMaxOrdersMonthly((data[0].max_orders_monthly as number | null) ?? null);
-							setCurrencySymbol((data[0] as any).currency_symbol || "EGP");
+							applyRestaurantRecord(data[0] as RestaurantRecord);
 						}
 						if (requireAdmin) {
 							const role = user.user_metadata?.role;
@@ -217,6 +238,31 @@ export function RestaurantProvider({
 		};
 	}, [initialSlug, requireAdmin, router]);
 
+	useEffect(() => {
+		if (!restaurantId) return;
+
+		const supabase = createClient();
+		const channel = supabase
+			.channel(`restaurant-context-${restaurantId}`)
+			.on(
+				"postgres_changes",
+				{
+					event: "UPDATE",
+					schema: "public",
+					table: "restaurants",
+					filter: `id=eq.${restaurantId}`,
+				},
+				(payload) => {
+					applyRestaurantRecord(payload.new as unknown as RestaurantRecord);
+				},
+			)
+			.subscribe();
+
+		return () => {
+			supabase.removeChannel(channel);
+		};
+	}, [restaurantId]);
+
 	return (
 		<RestaurantContext.Provider
 			value={{
@@ -227,6 +273,7 @@ export function RestaurantProvider({
 				plan,
 				subscriptionStatus,
 				trialEndsAt,
+				isExpired,
 				isActive,
 				isMaster,
 				parentId,

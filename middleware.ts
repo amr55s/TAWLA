@@ -1,8 +1,15 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { isSuperAdminUser } from '@/lib/auth/super-admin';
 
 const AUTH_ROUTES = ['/login', '/register', '/onboarding'];
-const SUPER_ADMIN_EMAIL = 'amrkhaled.contact@gmail.com';
+const BYPASS_PREFIXES = ['/api', '/_next'];
+const STATIC_ASSET_REGEX = /\.[^/]+$/;
+const TRIAL_SAFE_ROUTE_PATTERNS = [
+  /^\/[^/]+\/subscribe(?:\/|$)/,
+  /^\/[^/]+\/admin\/settings\/billing(?:\/|$)/,
+  /^\/[^/]+\/admin\/settings\/checkout(?:\/|$)/,
+];
 
 function isAdminRoute(pathname: string): boolean {
   // Match /:slug/admin or /:slug/admin/*
@@ -29,8 +36,25 @@ function isPublicRedirectRoute(pathname: string): boolean {
   return pathname === '/';
 }
 
+function isBypassedPath(pathname: string): boolean {
+  if (BYPASS_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+    return true;
+  }
+
+  return pathname === '/favicon.ico' || STATIC_ASSET_REGEX.test(pathname);
+}
+
+function isTrialSafeRoute(pathname: string): boolean {
+  return TRIAL_SAFE_ROUTE_PATTERNS.some((pattern) => pattern.test(pathname));
+}
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
+  const { pathname } = request.nextUrl;
+
+  if (isBypassedPath(pathname)) {
+    return supabaseResponse;
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -62,17 +86,16 @@ export async function middleware(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const { pathname } = request.nextUrl;
+  const isSuperAdmin = isSuperAdminUser(user);
 
   // ── Super Admin shortcut: redirect super admin to /super-admin ──
-  if (user && user.email === SUPER_ADMIN_EMAIL && (isAuthRoute(pathname) || isPublicRedirectRoute(pathname))) {
+  if (user && isSuperAdmin && (isAuthRoute(pathname) || isPublicRedirectRoute(pathname))) {
     return NextResponse.redirect(new URL('/super-admin', request.url));
   }
 
-  // ── Super Admin route guard: only the super admin email can access ──
+  // ── Super Admin route guard ──
   if (pathname.startsWith('/super-admin')) {
-    if (!user || user.email !== SUPER_ADMIN_EMAIL) {
+    if (!user || !isSuperAdmin) {
       return NextResponse.redirect(new URL('/', request.url));
     }
   }
@@ -83,8 +106,9 @@ export async function middleware(request: NextRequest) {
     pathname.includes('/cashier') ||
     pathname.includes('/admin');
   const isSuperAdminPath = pathname.startsWith('/super-admin');
+  const isTrialSafePath = isTrialSafeRoute(pathname);
 
-  if (isStaffPath && !isSuperAdminPath) {
+  if (isStaffPath && !isSuperAdminPath && !isTrialSafePath) {
     const slug = pathname.split('/')[1];
     const staffCookie = request.cookies.get('tawla_staff_session')?.value;
 

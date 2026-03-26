@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { isRestaurantOrderingUnavailable } from "@/lib/billing/subscription-status";
 import { getRestaurantBySlug } from "@/lib/data/restaurants";
 import MenuList from "@/components/menu/MenuList";
 
@@ -19,6 +20,12 @@ export default async function MenuPage({
 		<MenuList
 			restaurantId={restaurant.id}
 			slug={slug}
+			isOrderingDisabled={isRestaurantOrderingUnavailable({
+				plan: restaurant.plan,
+				trialEndsAt: restaurant.trial_ends_at,
+				subscriptionStatus: restaurant.subscription_status,
+				isActive: restaurant.is_active,
+			})}
 		/>
 	);
 }

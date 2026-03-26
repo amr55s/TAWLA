@@ -4,12 +4,15 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import * as React from "react";
+import { useEffect, useState } from "react";
 import {
 	BackButton,
 	CartItemCard,
 	FloatingNavBar,
 	PageHeader,
 } from "@/components/ui";
+import { isRestaurantOrderingUnavailable } from "@/lib/billing/subscription-status";
+import { getRestaurantBySlugClient } from "@/lib/data/orders.client";
 import { useCartStore } from "@/store/cart";
 
 const SERVICE_FEE_PERCENTAGE = 10;
@@ -21,6 +24,7 @@ export default function CartPage({
 }) {
 	const router = useRouter();
 	const { slug } = React.use(params);
+	const [orderingUnavailable, setOrderingUnavailable] = useState(false);
 
 	const {
 		items,
@@ -37,7 +41,33 @@ export default function CartPage({
 	const total = getTotal(SERVICE_FEE_PERCENTAGE);
 	const cartCount = getTotalItems();
 
+	useEffect(() => {
+		let cancelled = false;
+
+		(async () => {
+			const restaurant = await getRestaurantBySlugClient(slug);
+			if (!restaurant || cancelled) return;
+
+			setOrderingUnavailable(
+				isRestaurantOrderingUnavailable({
+					plan: restaurant.plan,
+					trialEndsAt: restaurant.trial_ends_at,
+					subscriptionStatus: restaurant.subscription_status,
+					isActive: restaurant.is_active,
+				}),
+			);
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [slug]);
+
 	const handleProceed = () => {
+		if (orderingUnavailable) {
+			return;
+		}
+
 		if (items.length > 0) {
 			posthog.capture("checkout_started", {
 				restaurant_slug: slug,
@@ -126,13 +156,19 @@ export default function CartPage({
 					</div>
 
 					{/* Checkout Button */}
-					<motion.button
-						whileTap={{ scale: 0.98 }}
-						onClick={handleProceed}
-						className="w-full py-4 bg-primary rounded-2xl text-white text-base font-bold transition-colors active:bg-primary/90"
-					>
-						Proceed to Checkout
-					</motion.button>
+					{orderingUnavailable ? (
+						<div className="w-full rounded-2xl border border-[#F3C4A7] bg-[#FFF5EC] px-5 py-4 text-center text-sm font-semibold text-[#9A4D18]">
+							Ordering is currently unavailable for this restaurant.
+						</div>
+					) : (
+						<motion.button
+							whileTap={{ scale: 0.98 }}
+							onClick={handleProceed}
+							className="w-full py-4 bg-primary rounded-2xl text-white text-base font-bold transition-colors active:bg-primary/90"
+						>
+							Proceed to Checkout
+						</motion.button>
+					)}
 				</div>
 			)}
 

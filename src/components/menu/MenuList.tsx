@@ -16,6 +16,7 @@ import {
 import { useCartStore } from "@/store/cart";
 import type { Category, MenuItem, MenuItemWithCategory } from "@/types/database";
 import Image from "next/image";
+import { toast } from "sonner";
 
 function MenuLoadingSkeleton() {
 	return (
@@ -49,9 +50,11 @@ function MenuLoadingSkeleton() {
 export default function MenuList({
 	restaurantId,
 	slug,
+	isOrderingDisabled = false,
 }: {
 	restaurantId: string;
 	slug: string;
+	isOrderingDisabled?: boolean;
 }) {
 	const router = useRouter();
 	const supabase = createClient();
@@ -131,6 +134,10 @@ export default function MenuList({
 
 	const handleAddToCart = useCallback(
 		(item: MenuItem) => {
+			if (isOrderingDisabled) {
+				toast.error("Ordering is currently unavailable for this restaurant.");
+				return;
+			}
 			addItem(item);
 			posthog.capture("item_added_to_cart", {
 				item_id: item.id,
@@ -140,7 +147,7 @@ export default function MenuList({
 				source: "menu_card",
 			});
 		},
-		[addItem, slug],
+		[addItem, isOrderingDisabled, slug],
 	);
 
 	const handleCardClick = useCallback((item: MenuItem) => {
@@ -150,6 +157,10 @@ export default function MenuList({
 
 	const handleSheetAddToCart = useCallback(
 		(item: MenuItem, quantity: number) => {
+			if (isOrderingDisabled) {
+				toast.error("Ordering is currently unavailable for this restaurant.");
+				return;
+			}
 			for (let i = 0; i < quantity; i++) {
 				addItem(item);
 			}
@@ -162,7 +173,7 @@ export default function MenuList({
 				source: "item_detail_sheet",
 			});
 		},
-		[addItem, slug],
+		[addItem, isOrderingDisabled, slug],
 	);
 
 	const handleCloseSheet = useCallback(() => {
@@ -272,6 +283,12 @@ export default function MenuList({
 						</button>
 					)}
 				</div>
+
+				{isOrderingDisabled && (
+					<div className="mt-4 rounded-2xl border border-[#F3C4A7] bg-[#FFF5EC] px-4 py-3 text-sm font-medium text-[#9A4D18]">
+						Ordering is currently unavailable for this restaurant.
+					</div>
+				)}
 			</header>
 
 			{/* Category Tabs */}
@@ -304,6 +321,7 @@ export default function MenuList({
 										}}
 										onAddToCart={handleAddToCart}
 										onCardClick={handleCardClick}
+										disabled={isOrderingDisabled}
 									/>
 								</motion.div>
 							))}
@@ -341,7 +359,11 @@ export default function MenuList({
 			</div>
 
 			{/* Floating Nav Bar */}
-			<FloatingNavBar restaurantSlug={slug} cartCount={cartCount} />
+			<FloatingNavBar
+				restaurantSlug={slug}
+				cartCount={cartCount}
+				orderingDisabled={isOrderingDisabled}
+			/>
 
 			{/* Item Detail Sheet */}
 			<ItemDetailSheet
@@ -349,6 +371,7 @@ export default function MenuList({
 				isOpen={isSheetOpen}
 				onClose={handleCloseSheet}
 				onAddToCart={handleSheetAddToCart}
+				disabled={isOrderingDisabled}
 			/>
 		</div>
 	);

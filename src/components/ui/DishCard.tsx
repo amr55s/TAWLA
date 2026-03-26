@@ -11,6 +11,7 @@ interface DishCardProps {
 	onCardClick?: (item: MenuItem) => void;
 	locale?: "en" | "ar";
 	className?: string;
+	disabled?: boolean;
 }
 
 export function DishCard({
@@ -19,6 +20,7 @@ export function DishCard({
 	onCardClick,
 	locale = "en",
 	className,
+	disabled = false,
 }: DishCardProps) {
 	const name = locale === "ar" ? item.name_ar : item.name_en;
 	const description =
@@ -48,6 +50,7 @@ export function DishCard({
 
 	const handleAddClick = (e: React.MouseEvent) => {
 		e.stopPropagation();
+		if (disabled) return;
 		onAddToCart(item);
 	};
 
@@ -57,6 +60,7 @@ export function DishCard({
 			onClick={handleCardClick}
 			className={clsx(
 				"bg-white rounded-2xl overflow-hidden shadow-card cursor-pointer transition-shadow hover:shadow-float",
+				disabled && "opacity-70",
 				className,
 			)}
 		>
@@ -108,7 +112,8 @@ export function DishCard({
 					<motion.button
 						whileTap={{ scale: 0.9 }}
 						onClick={handleAddClick}
-						className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white shadow-sm"
+						disabled={disabled}
+						className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white shadow-sm disabled:cursor-not-allowed disabled:bg-[#B0B8C4]"
 						aria-label={`Add ${name} to cart`}
 					>
 						<svg

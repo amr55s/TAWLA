@@ -1,5 +1,6 @@
 "use client";
 
+import { createGuestOrder, type CreateGuestOrderInput } from "@/app/actions/guest-orders";
 import { createClient } from "@/lib/supabase/client";
 import type {
 	MenuItem,
@@ -105,164 +106,18 @@ export async function getTablesByRestaurantClient(
 	return (data as Table[]) || [];
 }
 
-export interface CreateOrderClientInput {
-	restaurant_id: string;
-	table_id: string;
-	total_amount?: number;
-	special_requests?: string;
-	qr_code_data?: string;
-	guest_id?: string;
-	status?: OrderStatus;
-	items: {
-		menu_item_id: string;
-		quantity: number;
-		price_at_time?: number;
-	}[];
-}
+export interface CreateOrderClientInput extends CreateGuestOrderInput {}
 
 export async function createOrderWithItemsClient(
 	input: CreateOrderClientInput,
 ): Promise<Order | null> {
-	if (!input.items.length) {
-		console.error("Error creating order: no items in payload");
+	const result = await createGuestOrder(input);
+	if (!result.ok) {
+		console.error("Error creating order:", result.error);
 		return null;
 	}
 
-	const normalizedItems = input.items.map((item) => ({
-		menu_item_id: item.menu_item_id,
-		quantity: Number(item.quantity),
-	}));
-
-	if (
-		normalizedItems.some(
-			(item) =>
-				!item.menu_item_id ||
-				!Number.isInteger(item.quantity) ||
-				item.quantity <= 0,
-		)
-	) {
-		console.error("Error creating order: invalid item payload");
-		return null;
-	}
-
-	const uniqueItemIds = Array.from(
-		new Set(normalizedItems.map((item) => item.menu_item_id)),
-	);
-
-	const { data: categoriesData, error: categoriesError } = await supabase
-		.from("categories")
-		.select("id")
-		.eq("restaurant_id", input.restaurant_id);
-
-	if (categoriesError || !categoriesData?.length) {
-		console.error(
-			"Error fetching categories for secure pricing:",
-			JSON.stringify(categoriesError, null, 2),
-			categoriesError,
-		);
-		return null;
-	}
-
-	const categoryIds = categoriesData.map((category) => category.id);
-
-	const { data: menuItemsData, error: menuItemsError } = await supabase
-		.from("menu_items")
-		.select("id, price, is_available, category_id")
-		.in("id", uniqueItemIds)
-		.in("category_id", categoryIds);
-
-	if (menuItemsError || !menuItemsData) {
-		console.error(
-			"Error fetching menu items for secure pricing:",
-			JSON.stringify(menuItemsError, null, 2),
-			menuItemsError,
-		);
-		return null;
-	}
-
-	const menuItemMap = new Map(
-		menuItemsData
-			.filter((menuItem) => menuItem.is_available !== false)
-			.map((menuItem) => [menuItem.id, Number(menuItem.price)]),
-	);
-
-	if (uniqueItemIds.some((id) => !menuItemMap.has(id))) {
-		console.error(
-			"Error creating order: one or more items missing or unavailable",
-		);
-		return null;
-	}
-
-	const verifiedOrderItems = normalizedItems.map((item) => ({
-		menu_item_id: item.menu_item_id,
-		quantity: item.quantity,
-		price_at_time: menuItemMap.get(item.menu_item_id) as number,
-	}));
-
-	const verifiedTotalAmount = verifiedOrderItems.reduce(
-		(acc, item) => acc + item.price_at_time * item.quantity,
-		0,
-	);
-
-	const { data: orderData, error: orderError } = await supabase
-		.from("orders")
-		.insert({
-			restaurant_id: input.restaurant_id,
-			table_id: input.table_id,
-			total_amount: verifiedTotalAmount,
-			special_requests: input.special_requests,
-			qr_code_data: input.qr_code_data,
-			guest_id: input.guest_id || null,
-			// Guest orders must begin as pending and be confirmed by waiter later.
-			status: input.status || "pending",
-		})
-		.select()
-		.single();
-
-	if (orderError || !orderData) {
-		console.error(
-			"Error creating order:",
-			JSON.stringify(orderError, null, 2),
-			orderError,
-		);
-		return null;
-	}
-
-	const order = orderData as Order;
-
-	const orderItems = verifiedOrderItems.map((item) => ({
-		order_id: order.id,
-		menu_item_id: item.menu_item_id,
-		quantity: item.quantity,
-		price_at_time: item.price_at_time,
-	}));
-
-	const { error: itemsError } = await supabase
-		.from("order_items")
-		.insert(orderItems);
-
-	if (itemsError) {
-		console.error(
-			"Error creating order items:",
-			JSON.stringify(itemsError, null, 2),
-			itemsError,
-		);
-		const { error: rollbackError } = await supabase
-			.from("orders")
-			.delete()
-			.eq("id", order.id)
-			.eq("restaurant_id", input.restaurant_id);
-		if (rollbackError) {
-			console.error(
-				"Error rolling back order after items failure:",
-				JSON.stringify(rollbackError, null, 2),
-				rollbackError,
-			);
-		}
-		return null;
-	}
-
-	return { ...order, total_amount: verifiedTotalAmount };
+	return result.order;
 }
 
 export async function getTableByNumberClient(
