@@ -104,7 +104,7 @@ export function DishCard({
 
 				{/* Price Row */}
 				<div className="flex items-end justify-between gap-3">
-					<div className="font-bold text-[#0F4C75]">
+					<div className="font-bold text-tenant-primary">
 						<span className="text-base">{item.price.toFixed(3)}</span>
 						<span className="ms-1 text-[10px] font-normal text-[#7B8BA3]">
 							KD
@@ -120,7 +120,7 @@ export function DishCard({
 							whileTap={{ scale: 0.9 }}
 							onClick={handleAddClick}
 							disabled={disabled}
-							className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0F4C75] text-white shadow-sm"
+							className="flex h-10 w-10 items-center justify-center rounded-full bg-tenant-primary text-white shadow-sm"
 							aria-label={`Add ${name} to cart`}
 						>
 							<svg

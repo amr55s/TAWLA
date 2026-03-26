@@ -101,7 +101,7 @@ export function ItemDetailSheet({
 
 							{/* Price */}
 							<p
-								className="text-lg font-bold text-primary mb-6"
+								className="text-lg font-bold text-tenant-primary mb-6"
 								style={{ direction: "ltr", textAlign: "start" }}
 							>
 								{item.price.toFixed(3)} KD
@@ -112,7 +112,7 @@ export function ItemDetailSheet({
 								<motion.button
 									whileTap={{ scale: 0.9 }}
 									onClick={() => setQuantity(Math.max(1, quantity - 1))}
-									className="w-12 h-12 rounded-xl bg-background-card flex items-center justify-center text-xl font-bold text-primary shadow-card"
+									className="w-12 h-12 rounded-xl bg-background-card flex items-center justify-center text-xl font-bold text-tenant-primary shadow-card"
 								>
 									−
 								</motion.button>
@@ -122,7 +122,7 @@ export function ItemDetailSheet({
 								<motion.button
 									whileTap={{ scale: 0.9 }}
 									onClick={() => setQuantity(quantity + 1)}
-									className="w-12 h-12 rounded-xl bg-background-card flex items-center justify-center text-xl font-bold text-primary shadow-card"
+									className="w-12 h-12 rounded-xl bg-background-card flex items-center justify-center text-xl font-bold text-tenant-primary shadow-card"
 								>
 									+
 								</motion.button>
@@ -133,7 +133,7 @@ export function ItemDetailSheet({
 								whileTap={{ scale: 0.98 }}
 								onClick={handleAddToCart}
 								disabled={disabled}
-								className="w-full rounded-2xl bg-primary py-4 text-base font-bold text-white transition-colors active:bg-primary/90 disabled:cursor-not-allowed disabled:border disabled:border-[#F3C4A7] disabled:bg-[#FFF5EC] disabled:text-[#9A4D18]"
+								className="w-full rounded-2xl bg-tenant-primary py-4 text-base font-bold text-white transition-colors active:opacity-95 disabled:cursor-not-allowed disabled:border disabled:border-[#F3C4A7] disabled:bg-[#FFF5EC] disabled:text-[#9A4D18]"
 							>
 								{disabled ? (
 									<span>

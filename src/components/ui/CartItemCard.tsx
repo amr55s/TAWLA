@@ -46,7 +46,7 @@ export function CartItemCard({
 					{name}
 				</h4>
 				<p
-					className="text-sm font-bold text-primary"
+					className="text-sm font-bold text-tenant-primary"
 					style={{ direction: "ltr", textAlign: "start" }}
 				>
 					{(item.menuItem.price * item.quantity).toFixed(3)} KD
@@ -58,7 +58,7 @@ export function CartItemCard({
 				<motion.button
 					whileTap={{ scale: 0.9 }}
 					onClick={onDecrement}
-					className="w-9 h-9 flex items-center justify-center text-primary font-bold text-lg transition-colors active:bg-border-light"
+					className="w-9 h-9 flex items-center justify-center text-tenant-primary font-bold text-lg transition-colors active:bg-border-light"
 					aria-label="Decrease quantity"
 				>
 					−
@@ -71,7 +71,7 @@ export function CartItemCard({
 				<motion.button
 					whileTap={{ scale: 0.9 }}
 					onClick={onIncrement}
-					className="w-9 h-9 flex items-center justify-center text-primary font-bold text-lg transition-colors active:bg-border-light"
+					className="w-9 h-9 flex items-center justify-center text-tenant-primary font-bold text-lg transition-colors active:bg-border-light"
 					aria-label="Increase quantity"
 				>
 					+

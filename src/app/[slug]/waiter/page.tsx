@@ -372,7 +372,18 @@ export default function WaiterDashboardPage({
 	};
 
 	const handleConfirmOrder = async () => {
-		if (!selectedTable || !restaurant?.id) return;
+		if (!selectedTable) return;
+		const uuidLike =
+			typeof restaurant?.id === "string" &&
+			/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+				restaurant.id,
+			);
+		const restaurantId =
+			uuidLike ? restaurant!.id : (await getRestaurantBySlugClient(slug))?.id;
+		if (!restaurantId) {
+			toast.error("Restaurant context is missing. Please refresh and try again.");
+			return;
+		}
 		setIsConfirming(true);
 
 		const pendingOrderIds = tableOrders
@@ -388,7 +399,7 @@ export default function WaiterDashboardPage({
 		try {
 			const results = await Promise.all(
 				pendingOrderIds.map((id) =>
-					updateOrderStatusServerSide(id, "in_kitchen", restaurant.id),
+					updateOrderStatusServerSide(id, "in_kitchen", restaurantId),
 				),
 			);
 
@@ -417,7 +428,18 @@ export default function WaiterDashboardPage({
 	};
 
 	const handleClearTable = async () => {
-		if (!selectedTable || !restaurant?.id) return;
+		if (!selectedTable) return;
+		const uuidLike =
+			typeof restaurant?.id === "string" &&
+			/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+				restaurant.id,
+			);
+		const restaurantId =
+			uuidLike ? restaurant!.id : (await getRestaurantBySlugClient(slug))?.id;
+		if (!restaurantId) {
+			toast.error("Restaurant context is missing. Please refresh and try again.");
+			return;
+		}
 
 		const confirmClear = window.confirm(
 			`Are you sure you want to completely clear Table ${selectedTable.table_number}?`,
@@ -435,7 +457,7 @@ export default function WaiterDashboardPage({
 			);
 
 			if (tableUuid) {
-				const result = await clearTableServerSide(tableUuid, restaurant.id);
+				const result = await clearTableServerSide(tableUuid, restaurantId);
 				if (!result.ok) {
 					toast.error(result.error ?? "Failed to clear table");
 					return;
@@ -452,13 +474,23 @@ export default function WaiterDashboardPage({
 	};
 
 	const handleMarkServed = async () => {
-		if (!restaurant?.id) return;
+		const uuidLike =
+			typeof restaurant?.id === "string" &&
+			/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+				restaurant.id,
+			);
+		const restaurantId =
+			uuidLike ? restaurant!.id : (await getRestaurantBySlugClient(slug))?.id;
+		if (!restaurantId) {
+			toast.error("Restaurant context is missing. Please refresh and try again.");
+			return;
+		}
 		setIsServing(true);
 		try {
 			const readyOrders = tableOrders.filter((o) => o.status === "ready");
 			const results = await Promise.all(
 				readyOrders.map((o) =>
-					updateOrderStatusServerSide(o.id, "delivered", restaurant.id),
+					updateOrderStatusServerSide(o.id, "delivered", restaurantId),
 				),
 			);
 			const failed = results.filter((r) => !r.ok);
@@ -481,7 +513,18 @@ export default function WaiterDashboardPage({
 	};
 
 	const handleResolveCall = async () => {
-		if (!selectedTable || !restaurant?.id) return;
+		if (!selectedTable) return;
+		const uuidLike =
+			typeof restaurant?.id === "string" &&
+			/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+				restaurant.id,
+			);
+		const restaurantId =
+			uuidLike ? restaurant!.id : (await getRestaurantBySlugClient(slug))?.id;
+		if (!restaurantId) {
+			toast.error("Restaurant context is missing. Please refresh and try again.");
+			return;
+		}
 		setIsResolving(true);
 		const clickedTableNum = String(selectedTable.table_number);
 		try {
@@ -491,7 +534,7 @@ export default function WaiterDashboardPage({
 			if (tableUuid) {
 				const result = await resolveWaiterCallServerSide(
 					tableUuid,
-					restaurant.id,
+					restaurantId,
 				);
 				if (!result.ok) {
 					toast.error(result.error ?? "Failed to resolve call");

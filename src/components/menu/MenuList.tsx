@@ -367,7 +367,7 @@ export default function MenuList({
 						<button
 							type="button"
 							onClick={() => router.push(`/${slug}`)}
-							className="shrink-0 rounded-full bg-[#0F4C75] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#0A3558]"
+							className="shrink-0 rounded-full bg-tenant-primary px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-95"
 						>
 							Choose table
 						</button>

@@ -122,9 +122,9 @@ export default function GuestOrdersPage({
 				);
 			case "in_kitchen":
 				return (
-					<span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200 uppercase tracking-wider flex items-center gap-1">
-						<div className="w-3 h-3 rounded-full bg-blue-100 flex items-center justify-center">
-							<span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+					<span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-tenant-secondary text-text-heading border border-border-light uppercase tracking-wider flex items-center gap-1">
+						<div className="w-3 h-3 rounded-full bg-white flex items-center justify-center border border-border-light">
+							<span className="w-1.5 h-1.5 rounded-full bg-tenant-primary" />
 						</div>
 						Being Prepared
 					</span>
@@ -187,7 +187,8 @@ export default function GuestOrdersPage({
 				{!loading && orders.length > 0 && (
 					<button
 						onClick={fetchOrders}
-						className="text-xs text-primary font-semibold flex items-center gap-1 px-3 py-1.5 bg-primary/10 rounded-xl"
+						className="text-xs text-tenant-primary font-semibold flex items-center gap-1 px-3 py-1.5 rounded-xl"
+						style={{ backgroundColor: "color-mix(in srgb, var(--tenant-primary) 10%, white)" }}
 					>
 						<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
 							<path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />

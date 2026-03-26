@@ -86,7 +86,7 @@ export function CategoryTabs({
 							className={clsx(
 								"flex-shrink-0 rounded-full px-4 py-2.5 text-sm font-semibold transition-all whitespace-nowrap",
 								isActive
-									? "bg-[#0F4C75] text-white shadow-[0_10px_24px_-18px_rgba(15,76,117,0.75)]"
+									? "bg-tenant-primary text-white shadow-[0_10px_24px_-18px_rgba(10,22,40,0.28)]"
 									: "bg-transparent text-[#5A6B82] hover:bg-[#F5F7FA]",
 							)}
 							style={{ scrollSnapAlign: "start" }}

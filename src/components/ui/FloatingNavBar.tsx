@@ -157,7 +157,7 @@ export function FloatingNavBar({
 											className={clsx(
 												"transition-all duration-200 mt-0.5",
 												active
-													? "text-primary"
+													? "text-tenant-primary"
 													: "text-text-muted hover:text-text-secondary",
 											)}
 										>
@@ -174,7 +174,7 @@ export function FloatingNavBar({
 										<span
 											className={clsx(
 												"text-[9px] font-semibold transition-colors uppercase tracking-wider",
-												active ? "text-primary" : "text-text-muted",
+												active ? "text-tenant-primary" : "text-text-muted",
 											)}
 										>
 											{item.label}
@@ -191,7 +191,7 @@ export function FloatingNavBar({
 						<motion.button
 							whileTap={{ scale: 0.9 }}
 							onClick={() => setIsWaiterOpen(true)}
-							className="relative flex flex-col items-center justify-center w-[68px] h-[52px] rounded-[28px] bg-primary text-white shadow-md transition-all duration-300 hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5"
+							className="relative flex flex-col items-center justify-center w-[68px] h-[52px] rounded-[28px] bg-tenant-primary text-white shadow-md transition-all duration-300 hover:opacity-95 hover:shadow-lg hover:-translate-y-0.5"
 						>
 							<Bell size={22} className="mt-0.5" strokeWidth={2} />
 							<span className="text-[9px] font-bold mt-0.5 uppercase tracking-wider">

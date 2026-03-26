@@ -43,6 +43,11 @@
   /* Fonts */
   --font-sans: var(--font-plus-jakarta-sans), system-ui, sans-serif;
   --font-arabic: var(--font-din-next), system-ui, sans-serif;
+
+  /* Tenant (Guest Menu) theme tokens
+     NOTE: These are intentionally separate from Tawla staff tokens. */
+  --tenant-primary: #1a4d3a;
+  --tenant-secondary: #f5f5f5;
 }
 
 @layer base {
@@ -168,6 +173,27 @@ body {
 
 .text-wood {
   color: var(--secondary);
+}
+
+@layer utilities {
+  .bg-tenant-primary {
+    background-color: var(--tenant-primary, #1a4d3a);
+  }
+  .text-tenant-primary {
+    color: var(--tenant-primary, #1a4d3a);
+  }
+  .border-tenant-primary {
+    border-color: var(--tenant-primary, #1a4d3a);
+  }
+  .ring-tenant-primary {
+    --tw-ring-color: var(--tenant-primary, #1a4d3a);
+  }
+  .hover\:bg-tenant-primary:hover {
+    background-color: var(--tenant-primary, #1a4d3a);
+  }
+  .hover\:text-tenant-primary:hover {
+    color: var(--tenant-primary, #1a4d3a);
+  }
 }
 
 /* Print styles for robust Tailwind thermal receipt rendering */
