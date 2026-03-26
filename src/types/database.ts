@@ -10,6 +10,7 @@ export type OrderStatus =
 	| "paid"
 	| "cancelled"
 	| "completed";
+export type PaymentMethod = "cash" | "card";
 export type WaiterCallType = "assistance" | "bill";
 export type WaiterCallStatus = "active" | "resolved";
 
@@ -85,6 +86,7 @@ export interface Order {
 	order_number: number;
 	qr_code_data?: string | null;
 	status: OrderStatus;
+	payment_method?: PaymentMethod | null;
 	total_amount: number;
 	special_requests?: string | null;
 	created_at: string;

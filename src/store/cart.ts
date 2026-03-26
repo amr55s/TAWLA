@@ -1,8 +1,8 @@
 "use client";
 
+import { v4 as uuidv4 } from "uuid";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { v4 as uuidv4 } from "uuid";
 import type { MenuItem } from "@/types/database";
 
 export interface CartItem {
@@ -17,8 +17,9 @@ interface CartState {
 	restaurantSlug: string | null;
 	guestId: string;
 
-	setTableNumber: (tableNumber: string) => void;
-	setRestaurantSlug: (slug: string) => void;
+	setTableNumber: (tableNumber: string | null) => void;
+	setRestaurantSlug: (slug: string | null) => void;
+	syncContext: (slug: string, tableNumber?: string | null) => void;
 	setGuestId: (id: string) => void;
 	addItem: (menuItem: MenuItem, quantity?: number) => void;
 	removeItem: (menuItemId: string) => void;
@@ -39,9 +40,28 @@ export const useCartStore = create<CartState>()(
 			restaurantSlug: null,
 			guestId: uuidv4(),
 
-			setTableNumber: (tableNumber: string) => set({ tableNumber }),
+			setTableNumber: (tableNumber: string | null) => set({ tableNumber }),
 
-			setRestaurantSlug: (slug: string) => set({ restaurantSlug: slug }),
+			setRestaurantSlug: (slug: string | null) => set({ restaurantSlug: slug }),
+
+			syncContext: (slug: string, tableNumber?: string | null) =>
+				set((state) => {
+					const normalizedTable = tableNumber?.trim() || null;
+					const restaurantChanged =
+						Boolean(state.restaurantSlug) && state.restaurantSlug !== slug;
+					const tableChanged =
+						!restaurantChanged &&
+						Boolean(normalizedTable) &&
+						Boolean(state.tableNumber) &&
+						state.tableNumber !== normalizedTable;
+
+					return {
+						restaurantSlug: slug,
+						tableNumber:
+							normalizedTable ?? (restaurantChanged ? null : state.tableNumber),
+						items: restaurantChanged || tableChanged ? [] : state.items,
+					};
+				}),
 
 			setGuestId: (id: string) => set({ guestId: id }),
 

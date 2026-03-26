@@ -42,7 +42,7 @@ export function CategoryTabs({
 				behavior: "smooth",
 			});
 		}
-	}, [activeCategory]);
+	}, []);
 
 	const allCategories = showAllOption
 		? [
@@ -60,40 +60,42 @@ export function CategoryTabs({
 		: categories;
 
 	return (
-		<div
-			ref={scrollRef}
-			className="flex gap-2 overflow-x-auto scrollbar-hide px-5 py-3"
-			style={{
-				scrollSnapType: "x mandatory",
-				WebkitOverflowScrolling: "touch",
-			}}
-		>
-			{allCategories.map((category) => {
-				const isActive =
-					category.id === activeCategory ||
-					(category.id === "all" && !activeCategory);
-				const name = locale === "ar" ? category.name_ar : category.name_en;
+		<div className="px-5 py-3">
+			<div
+				ref={scrollRef}
+				className="flex gap-2 overflow-x-auto whitespace-nowrap rounded-full bg-white/70 px-1 py-1 scrollbar-hide"
+				style={{
+					scrollSnapType: "x mandatory",
+					WebkitOverflowScrolling: "touch",
+				}}
+			>
+				{allCategories.map((category) => {
+					const isActive =
+						category.id === activeCategory ||
+						(category.id === "all" && !activeCategory);
+					const name = locale === "ar" ? category.name_ar : category.name_en;
 
-				return (
-					<motion.button
-						key={category.id}
-						ref={isActive ? activeRef : null}
-						onClick={() =>
-							onCategoryChange(category.id === "all" ? "" : category.id)
-						}
-						whileTap={{ scale: 0.95 }}
-						className={clsx(
-							"flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all whitespace-nowrap",
-							isActive
-								? "bg-primary text-white shadow-sm"
-								: "bg-background-card text-text-muted hover:bg-border-light",
-						)}
-						style={{ scrollSnapAlign: "start" }}
-					>
-						{name}
-					</motion.button>
-				);
-			})}
+					return (
+						<motion.button
+							key={category.id}
+							ref={isActive ? activeRef : null}
+							onClick={() =>
+								onCategoryChange(category.id === "all" ? "" : category.id)
+							}
+							whileTap={{ scale: 0.97 }}
+							className={clsx(
+								"flex-shrink-0 rounded-full px-4 py-2.5 text-sm font-semibold transition-all whitespace-nowrap",
+								isActive
+									? "bg-[#0F4C75] text-white shadow-[0_10px_24px_-18px_rgba(15,76,117,0.75)]"
+									: "bg-transparent text-[#5A6B82] hover:bg-[#F5F7FA]",
+							)}
+							style={{ scrollSnapAlign: "start" }}
+						>
+							{name}
+						</motion.button>
+					);
+				})}
+			</div>
 		</div>
 	);
 }

@@ -1,10 +1,11 @@
 "use client";
-import { Building2 } from "lucide-react";
+import { clsx } from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
 import {
 	AlertCircle,
 	BarChart3,
 	Bell,
+	Building2,
 	ChevronDown,
 	ClipboardList,
 	Copy,
@@ -26,15 +27,15 @@ import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { clearStaffSession } from "@/app/actions/staff-auth";
+import { SubscriptionHardStopView } from "@/components/billing/SubscriptionHardStopView";
+import { LogoBrand } from "@/components/ui/LogoBrand";
+import { getTrialDaysRemaining, PRO_TRIAL_DAYS } from "@/lib/billing/trial";
 import {
 	RestaurantProvider,
 	useRestaurant,
 } from "@/lib/contexts/RestaurantContext";
 import { createClient } from "@/lib/supabase/client";
-import { SubscriptionHardStopView } from "@/components/billing/SubscriptionHardStopView";
-import { LogoBrand } from "@/components/ui/LogoBrand";
-import { clearStaffSession } from "@/app/actions/staff-auth";
-import { getTrialDaysRemaining, PRO_TRIAL_DAYS } from "@/lib/billing/trial";
 
 function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 	const pathname = usePathname();
@@ -44,6 +45,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 		slug: contextSlug,
 		restaurantId,
 		plan,
+		subscriptionStatus,
 		trialEndsAt,
 		isExpired,
 		isActive: isRestaurantActive,
@@ -89,7 +91,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 		const supabase = createClient();
 
 		const { error } = await supabase.auth.updateUser({
-			password: newPassword
+			password: newPassword,
 		});
 
 		setPasswordLoading(false);
@@ -109,7 +111,9 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 		if (!notifOpen || !restaurantId) return;
 		setNotifLoading(true);
 		const fetchNotifs = async () => {
-			const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+			const yesterday = new Date(
+				Date.now() - 24 * 60 * 60 * 1000,
+			).toISOString();
 			const supabase = createClient();
 			const { data } = await supabase
 				.from("orders")
@@ -134,13 +138,15 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 	}, [notifOpen, restaurantId]);
 
 	const formatTimeAgo = (dateString: string) => {
-		const diff = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / 60000);
+		const diff = Math.floor(
+			(Date.now() - new Date(dateString).getTime()) / 60000,
+		);
 		if (diff < 1) return "Just now";
 		if (diff < 60) return `${diff} mins ago`;
 		const hours = Math.floor(diff / 60);
-		if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+		if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
 		const days = Math.floor(hours / 24);
-		return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+		return `${days} ${days === 1 ? "day" : "days"} ago`;
 	};
 
 	const handleLogout = async () => {
@@ -202,13 +208,20 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 		{ label: "Analytics", href: `${basePath}/analytics`, icon: BarChart3 },
 		{ label: "Staff", href: `${basePath}/staff`, icon: Users },
 		{ label: "Settings", href: `${basePath}/settings`, icon: Settings },
-		{ label: "Billing", href: `${basePath}/settings/billing`, icon: CreditCard },
+		{
+			label: "Billing",
+			href: `${basePath}/settings/billing`,
+			icon: CreditCard,
+		},
 	];
 
 	const isActive = (href: string) => {
 		if (href === basePath) return pathname === basePath;
 		// Prevent Settings from highlighting when a sub-route like Billing is active
-		if (href === `${basePath}/settings` && pathname.startsWith(`${basePath}/settings/`)) {
+		if (
+			href === `${basePath}/settings` &&
+			pathname.startsWith(`${basePath}/settings/`)
+		) {
 			return false;
 		}
 		return pathname.startsWith(href);
@@ -231,11 +244,41 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 	const isSafeAdminPage =
 		pathname.startsWith(`${basePath}/settings/billing`) ||
 		pathname.startsWith(`${basePath}/settings/checkout`);
-	const navDisabledClass = isExpired ? "pointer-events-none opacity-40 grayscale" : "";
+	const navDisabledClass = isExpired
+		? "pointer-events-none opacity-40 grayscale"
+		: "";
 	const shouldShowHardStop =
 		!pathname.startsWith("/super-admin") && isExpired && !isSafeAdminPage;
 	const trialDaysLeft = getTrialDaysRemaining(trialEndsAt);
-	const shouldShowTrialBanner = plan === "trial" && !shouldShowHardStop && trialEndsAt;
+	const shouldShowTrialBanner =
+		plan === "trial" && !shouldShowHardStop && trialEndsAt;
+	const subscriptionBadge = (() => {
+		if (isExpired) {
+			return {
+				label: "Expired",
+				className: "border-red-200 bg-red-50 text-red-700",
+			};
+		}
+
+		if (plan === "trial") {
+			return {
+				label: "Trialing",
+				className: "border-amber-200 bg-amber-50 text-amber-700",
+			};
+		}
+
+		if (subscriptionStatus === "active" || plan) {
+			return {
+				label: "Active",
+				className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+			};
+		}
+
+		return {
+			label: "Inactive",
+			className: "border-slate-200 bg-slate-50 text-slate-700",
+		};
+	})();
 
 	useEffect(() => {
 		if (!isExpired) return;
@@ -259,7 +302,14 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 				.or(`id.eq.${restaurantId},parent_id.eq.${restaurantId}`)
 				.order("created_at", { ascending: true });
 
-			setBranches((data as Array<{ id: string; name: string; slug: string; parent_id: string | null }>) || []);
+			setBranches(
+				(data as Array<{
+					id: string;
+					name: string;
+					slug: string;
+					parent_id: string | null;
+				}>) || [],
+			);
 		})();
 	}, [isMaster, restaurantId]);
 
@@ -279,7 +329,9 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 		if (error) {
 			toast.error(error.message || "Failed to submit ticket.");
 		} else {
-			toast.success("Support ticket submitted successfully. We will be in touch soon!");
+			toast.success(
+				"Support ticket submitted successfully. We will be in touch soon!",
+			);
 			setSupportSubject("");
 			setSupportMessage("");
 		}
@@ -296,12 +348,15 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 						Account Suspended
 					</h1>
 					<p className="text-sm text-[#5A6B82] mb-8">
-						Your restaurant account is currently inactive. Please contact support.
+						Your restaurant account is currently inactive. Please contact
+						support.
 					</p>
 
 					<form onSubmit={handleSupportSubmit} className="space-y-4 text-left">
 						<div>
-							<label className="text-xs font-semibold text-[#5A6B82] mb-1.5 block">Subject</label>
+							<label className="text-xs font-semibold text-[#5A6B82] mb-1.5 block">
+								Subject
+							</label>
 							<input
 								required
 								value={supportSubject}
@@ -312,7 +367,9 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 							/>
 						</div>
 						<div>
-							<label className="text-xs font-semibold text-[#5A6B82] mb-1.5 block">Message</label>
+							<label className="text-xs font-semibold text-[#5A6B82] mb-1.5 block">
+								Message
+							</label>
 							<textarea
 								required
 								value={supportMessage}
@@ -338,6 +395,23 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 						Sign out
 					</button>
 				</div>
+			</div>
+		);
+	}
+
+	if (shouldShowHardStop) {
+		return (
+			<div className="min-h-screen bg-[#F5F7FA]">
+				<SubscriptionHardStopView
+					slug={slug}
+					title={plan === "trial" ? "Trial Expired" : "Subscription Inactive"}
+					description={
+						plan === "trial"
+							? "Your complimentary Pro trial has ended. Upgrade to Pro to restore dashboard access, menu ordering, and checkout immediately."
+							: "Your subscription is no longer active. Admin access and guest ordering are frozen until billing is restored."
+					}
+					isTrialExpired={plan === "trial"}
+				/>
 			</div>
 		);
 	}
@@ -410,10 +484,15 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 												href={`/${branch.slug}/admin`}
 												aria-disabled={isExpired}
 												tabIndex={isExpired ? -1 : 0}
-												className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium hover:bg-white ${branch.slug === slug ? "bg-white text-[#0F4C75]" : "text-[#5A6B82]"
-													}`}
+												className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium hover:bg-white ${
+													branch.slug === slug
+														? "bg-white text-[#0F4C75]"
+														: "text-[#5A6B82]"
+												}`}
 											>
-												<span>{branch.parent_id ? branch.name : `${branch.name} HQ`}</span>
+												<span>
+													{branch.parent_id ? branch.name : `${branch.name} HQ`}
+												</span>
 												<span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B0B8C4]">
 													{branch.parent_id ? "Branch" : "Master"}
 												</span>
@@ -436,10 +515,11 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 									href={item.href}
 									aria-disabled={isExpired}
 									tabIndex={isExpired ? -1 : 0}
-									className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 group ${active
-										? "bg-[#0F4C75] text-white shadow-[0_2px_8px_rgba(15,76,117,0.2)]"
-										: "text-[#5A6B82] hover:bg-[#F0F4F8] hover:text-[#0A1628]"
-										} ${navDisabledClass}`}
+									className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 group ${
+										active
+											? "bg-[#0F4C75] text-white shadow-[0_2px_8px_rgba(15,76,117,0.2)]"
+											: "text-[#5A6B82] hover:bg-[#F0F4F8] hover:text-[#0A1628]"
+									} ${navDisabledClass}`}
 								>
 									<Icon size={18} strokeWidth={active ? 2 : 1.5} />
 									{item.label}
@@ -461,10 +541,11 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 									href={item.href}
 									aria-disabled={isExpired}
 									tabIndex={isExpired ? -1 : 0}
-									className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 group ${active
-										? "bg-[#0F4C75] text-white shadow-[0_2px_8px_rgba(15,76,117,0.2)]"
-										: "text-[#5A6B82] hover:bg-[#F0F4F8] hover:text-[#0A1628]"
-										} ${navDisabledClass}`}
+									className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 group ${
+										active
+											? "bg-[#0F4C75] text-white shadow-[0_2px_8px_rgba(15,76,117,0.2)]"
+											: "text-[#5A6B82] hover:bg-[#F0F4F8] hover:text-[#0A1628]"
+									} ${navDisabledClass}`}
 								>
 									<Icon size={18} strokeWidth={active ? 2 : 1.5} />
 									{item.label}
@@ -569,21 +650,16 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 
 							{/* Right actions */}
 							<div className="flex items-center gap-3 relative">
-								{/* Trial Badge */}
-								{plan === "trial" && trialEndsAt && (() => {
-									const isUrgent = trialDaysLeft <= 3;
-									return (
-										<div
-											className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-colors ${isUrgent
-												? "bg-red-50 border-red-200 text-red-600"
-												: "bg-amber-50 border-amber-200 text-amber-700"
-												}`}
-										>
-											<Sparkles size={14} />
-											Trialing: {trialDaysLeft > 0 ? `${trialDaysLeft} day${trialDaysLeft !== 1 ? "s" : ""} left` : "Expired"}
-										</div>
-									);
-								})()}
+								<Link
+									href={`/${slug}/admin/settings/billing`}
+									className={clsx(
+										"hidden sm:inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold transition-colors",
+										subscriptionBadge.className,
+									)}
+								>
+									<Sparkles size={14} />
+									{subscriptionBadge.label}
+								</Link>
 
 								{/* Notification */}
 								<div className="relative">
@@ -614,7 +690,9 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 												className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-[#E8ECF1] overflow-hidden z-50"
 											>
 												<div className="flex items-center justify-between p-4 border-b border-[#E8ECF1]">
-													<h3 className="text-sm font-bold text-[#0A1628]">Notifications</h3>
+													<h3 className="text-sm font-bold text-[#0A1628]">
+														Notifications
+													</h3>
 													<button
 														onClick={handleClearNotifs}
 														className="text-xs font-semibold text-[#94A3B8] hover:text-[#0F4C75] transition-colors"
@@ -627,64 +705,96 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 														<div className="p-8 flex justify-center">
 															<div className="w-5 h-5 border-2 border-[#0F4C75] border-t-transparent rounded-full animate-spin" />
 														</div>
-													) : (() => {
-														const visibleNotifs = recentNotifOrders.filter(
-															(o) => !clearedAt || new Date(o.created_at) > clearedAt
-														);
+													) : (
+														(() => {
+															const visibleNotifs = recentNotifOrders.filter(
+																(o) =>
+																	!clearedAt ||
+																	new Date(o.created_at) > clearedAt,
+															);
 
-														if (visibleNotifs.length === 0) {
-															return (
-																<div className="px-6 py-10 flex flex-col items-center justify-center text-center">
-																	<div className="w-10 h-10 rounded-full bg-[#F5F7FA] flex items-center justify-center mb-3">
-																		<Bell size={18} className="text-[#B0B8C4]" />
+															if (visibleNotifs.length === 0) {
+																return (
+																	<div className="px-6 py-10 flex flex-col items-center justify-center text-center">
+																		<div className="w-10 h-10 rounded-full bg-[#F5F7FA] flex items-center justify-center mb-3">
+																			<Bell
+																				size={18}
+																				className="text-[#B0B8C4]"
+																			/>
+																		</div>
+																		<p className="text-sm font-semibold text-[#0A1628] mb-0.5">
+																			All caught up!
+																		</p>
+																		<p className="text-xs text-[#94A3B8]">
+																			No new notifications to show.
+																		</p>
 																	</div>
-																	<p className="text-sm font-semibold text-[#0A1628] mb-0.5">All caught up!</p>
-																	<p className="text-xs text-[#94A3B8]">No new notifications to show.</p>
+																);
+															}
+
+															return (
+																<div className="flex flex-col">
+																	{visibleNotifs.map((order) => {
+																		const tableNum = order.tables?.table_number;
+																		const itemCount =
+																			order.order_items?.length || 0;
+																		const amount = Number(
+																			order.total_amount || 0,
+																		).toFixed(2);
+																		const statusText = order.status.replace(
+																			/_/g,
+																			" ",
+																		);
+
+																		return (
+																			<Link
+																				key={order.id}
+																				href={`/${slug}/admin/orders`}
+																				onClick={() => setNotifOpen(false)}
+																				className="flex items-start gap-3 px-4 py-3 hover:bg-[#F0F4F8] border-b border-[#E8ECF1] last:border-0 transition-colors group"
+																			>
+																				<div className="mt-1.5 w-2 h-2 rounded-full shrink-0 bg-[#0F4C75] shadow-[0_0_8px_rgba(15,76,117,0.4)]" />
+
+																				<div className="flex-1 min-w-0">
+																					<div className="flex items-center justify-between gap-2 mb-0.5">
+																						<span className="text-sm font-bold text-[#0A1628] truncate group-hover:text-[#0F4C75] transition-colors">
+																							Order #
+																							{order.order_number ||
+																								order.id.slice(0, 4)}{" "}
+																							•{" "}
+																							{tableNum
+																								? `Table ${tableNum}`
+																								: "Takeaway"}
+																						</span>
+																						<span className="text-[10px] font-medium text-[#94A3B8] shrink-0 whitespace-nowrap">
+																							{formatTimeAgo(order.created_at)}
+																						</span>
+																					</div>
+
+																					<div className="flex items-center gap-1.5 text-xs text-[#7B8BA3] truncate">
+																						<span className="font-semibold text-[#0F4C75]">
+																							${amount}
+																						</span>
+																						<span>•</span>
+																						<span>
+																							{itemCount}{" "}
+																							{itemCount === 1
+																								? "item"
+																								: "items"}
+																						</span>
+																						<span>•</span>
+																						<span className="capitalize truncate">
+																							{statusText}
+																						</span>
+																					</div>
+																				</div>
+																			</Link>
+																		);
+																	})}
 																</div>
 															);
-														}
-
-														return (
-															<div className="flex flex-col">
-																{visibleNotifs.map((order) => {
-																	const tableNum = order.tables?.table_number;
-																	const itemCount = order.order_items?.length || 0;
-																	const amount = Number(order.total_amount || 0).toFixed(2);
-																	const statusText = order.status.replace(/_/g, " ");
-
-																	return (
-																		<Link
-																			key={order.id}
-																			href={`/${slug}/admin/orders`}
-																			onClick={() => setNotifOpen(false)}
-																			className="flex items-start gap-3 px-4 py-3 hover:bg-[#F0F4F8] border-b border-[#E8ECF1] last:border-0 transition-colors group"
-																		>
-																			<div className="mt-1.5 w-2 h-2 rounded-full shrink-0 bg-[#0F4C75] shadow-[0_0_8px_rgba(15,76,117,0.4)]" />
-
-																			<div className="flex-1 min-w-0">
-																				<div className="flex items-center justify-between gap-2 mb-0.5">
-																					<span className="text-sm font-bold text-[#0A1628] truncate group-hover:text-[#0F4C75] transition-colors">
-																						Order #{order.order_number || order.id.slice(0, 4)} • {tableNum ? `Table ${tableNum}` : "Takeaway"}
-																					</span>
-																					<span className="text-[10px] font-medium text-[#94A3B8] shrink-0 whitespace-nowrap">
-																						{formatTimeAgo(order.created_at)}
-																					</span>
-																				</div>
-
-																				<div className="flex items-center gap-1.5 text-xs text-[#7B8BA3] truncate">
-																					<span className="font-semibold text-[#0F4C75]">${amount}</span>
-																					<span>•</span>
-																					<span>{itemCount} {itemCount === 1 ? 'item' : 'items'}</span>
-																					<span>•</span>
-																					<span className="capitalize truncate">{statusText}</span>
-																				</div>
-																			</div>
-																		</Link>
-																	);
-																})}
-															</div>
-														);
-													})()}
+														})()
+													)}
 												</div>
 											</motion.div>
 										)}
@@ -802,13 +912,16 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 														onClick={() => setMobileOpen(false)}
 														aria-disabled={isExpired}
 														tabIndex={isExpired ? -1 : 0}
-														className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all ${branch.slug === slug
-															? "bg-[#0F4C75] text-white"
-															: "text-[#5A6B82] hover:bg-[#F0F4F8]"
-															} ${navDisabledClass}`}
+														className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all ${
+															branch.slug === slug
+																? "bg-[#0F4C75] text-white"
+																: "text-[#5A6B82] hover:bg-[#F0F4F8]"
+														} ${navDisabledClass}`}
 													>
 														<Building2 size={18} />
-														{branch.parent_id ? branch.name : `${branch.name} HQ`}
+														{branch.parent_id
+															? branch.name
+															: `${branch.name} HQ`}
 													</Link>
 												))}
 											</>
@@ -823,10 +936,11 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 													onClick={() => setMobileOpen(false)}
 													aria-disabled={isExpired}
 													tabIndex={isExpired ? -1 : 0}
-													className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all ${active
-														? "bg-[#0F4C75] text-white"
-														: "text-[#5A6B82] hover:bg-[#F0F4F8]"
-														} ${navDisabledClass}`}
+													className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all ${
+														active
+															? "bg-[#0F4C75] text-white"
+															: "text-[#5A6B82] hover:bg-[#F0F4F8]"
+													} ${navDisabledClass}`}
 												>
 													<Icon size={18} /> {item.label}
 												</Link>
@@ -839,7 +953,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 					</AnimatePresence>
 
 					{/* Main Content */}
-					<main className={`flex-1 overflow-y-auto ${shouldShowHardStop ? "" : "p-5 lg:p-8"}`}>
+					<main className="flex-1 overflow-y-auto p-5 lg:p-8">
 						{shouldShowTrialBanner && (
 							<div className="mb-5 rounded-[28px] border border-[#BBE1FA] bg-[linear-gradient(135deg,#F7FBFE_0%,#FFFFFF_100%)] px-5 py-4 shadow-[0_18px_50px_rgba(15,76,117,0.08)]">
 								<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -852,7 +966,9 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 												Pro Trial Active
 											</p>
 											<p className="mt-1 text-sm font-semibold text-[#0A1628]">
-												You are enjoying {PRO_TRIAL_DAYS} days of Pro features for free. Your trial ends in {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""}.
+												You are enjoying {PRO_TRIAL_DAYS} days of Pro features
+												for free. Your trial ends in {trialDaysLeft} day
+												{trialDaysLeft !== 1 ? "s" : ""}.
 											</p>
 										</div>
 									</div>
@@ -865,20 +981,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 								</div>
 							</div>
 						)}
-						{shouldShowHardStop ? (
-							<SubscriptionHardStopView
-								slug={slug}
-								title={plan === "trial" ? "Trial Expired" : "Subscription Inactive"}
-								description={
-									plan === "trial"
-										? "Your complimentary Pro trial has ended. Upgrade to Pro to restore dashboard access, menu ordering, and checkout immediately."
-										: "Your subscription is no longer active. Admin access and guest ordering are frozen until billing is restored."
-								}
-								isTrialExpired={plan === "trial"}
-							/>
-						) : (
-							children
-						)}
+						{children}
 					</main>
 
 					{/* Change Password Modal */}
@@ -893,7 +996,9 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 								{/* Backdrop */}
 								<div
 									className="absolute inset-0 bg-black/20 backdrop-blur-sm"
-									onClick={() => !passwordLoading && setPasswordModalOpen(false)}
+									onClick={() =>
+										!passwordLoading && setPasswordModalOpen(false)
+									}
 								/>
 
 								{/* Modal Panel */}
@@ -904,9 +1009,13 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 									className="relative bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-[#E8ECF1] p-6 max-w-md w-full"
 								>
 									<div className="flex items-center justify-between mb-5">
-										<h2 className="text-lg font-bold text-[#0A1628]">Change Password</h2>
+										<h2 className="text-lg font-bold text-[#0A1628]">
+											Change Password
+										</h2>
 										<button
-											onClick={() => !passwordLoading && setPasswordModalOpen(false)}
+											onClick={() =>
+												!passwordLoading && setPasswordModalOpen(false)
+											}
 											className="p-1 text-[#7B8BA3] hover:text-[#0A1628] transition-colors rounded-lg hover:bg-[#F5F7FA]"
 										>
 											<X size={18} />

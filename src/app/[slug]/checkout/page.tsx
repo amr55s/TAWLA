@@ -7,12 +7,12 @@ import * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { MenuItemImage } from "@/components/ui/MenuItemImage";
+import { useRestaurantOrderingAvailability } from "@/hooks/useRestaurantOrderingAvailability";
 import {
 	createOrderWithItemsClient,
 	getRestaurantBySlugClient,
 	getTableByNumberClient,
 } from "@/lib/data/orders.client";
-import { isRestaurantOrderingUnavailable } from "@/lib/billing/subscription-status";
 import { useCartStore } from "@/store/cart";
 
 const SERVICE_FEE_PERCENTAGE = 10;
@@ -30,7 +30,7 @@ export default function CheckoutPage({
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [navigatingToOrders, setNavigatingToOrders] = useState(false);
 	const [showSuccess, setShowSuccess] = useState(false);
-	const [orderingUnavailable, setOrderingUnavailable] = useState(false);
+	const orderingUnavailable = useRestaurantOrderingAvailability(slug, false);
 	const isSubmittingRef = useRef(false);
 
 	const {
@@ -44,31 +44,9 @@ export default function CheckoutPage({
 		setGuestId,
 	} = useCartStore();
 
-	const subtotal = getSubtotal();
-	const serviceFee = getServiceFee(SERVICE_FEE_PERCENTAGE);
+	const _subtotal = getSubtotal();
+	const _serviceFee = getServiceFee(SERVICE_FEE_PERCENTAGE);
 	const total = getTotal(SERVICE_FEE_PERCENTAGE);
-
-	useEffect(() => {
-		let cancelled = false;
-
-		(async () => {
-			const restaurant = await getRestaurantBySlugClient(slug);
-			if (!restaurant || cancelled) return;
-
-			setOrderingUnavailable(
-				isRestaurantOrderingUnavailable({
-					plan: restaurant.plan,
-					trialEndsAt: restaurant.trial_ends_at,
-					subscriptionStatus: restaurant.subscription_status,
-					isActive: restaurant.is_active,
-				}),
-			);
-		})();
-
-		return () => {
-			cancelled = true;
-		};
-	}, [slug]);
 
 	const handlePlaceOrder = async () => {
 		if (isSubmittingRef.current) return;
@@ -90,14 +68,7 @@ export default function CheckoutPage({
 				toast.error("Restaurant not found");
 				return;
 			}
-			if (
-				isRestaurantOrderingUnavailable({
-					plan: restaurant.plan,
-					trialEndsAt: restaurant.trial_ends_at,
-					subscriptionStatus: restaurant.subscription_status,
-					isActive: restaurant.is_active,
-				})
-			) {
+			if (orderingUnavailable) {
 				toast.error("Ordering is currently unavailable for this restaurant.");
 				return;
 			}
@@ -120,7 +91,7 @@ export default function CheckoutPage({
 				}
 			}
 			if (!finalGuestId) {
-				finalGuestId = "guest_" + Math.random().toString(36).substr(2, 9);
+				finalGuestId = `guest_${Math.random().toString(36).substr(2, 9)}`;
 			}
 			// Always persist in both locations
 			if (typeof window !== "undefined") {
@@ -340,7 +311,9 @@ export default function CheckoutPage({
 											<p className="font-semibold text-sm text-text-heading">
 												{item.menuItem.name_en}
 											</p>
-											<p className="text-xs text-text-muted">×{item.quantity}</p>
+											<p className="text-xs text-text-muted">
+												×{item.quantity}
+											</p>
 										</div>
 									</div>
 									<p
@@ -390,7 +363,20 @@ export default function CheckoutPage({
 				<div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border-light px-5 pt-4 pb-6 safe-bottom">
 					{orderingUnavailable ? (
 						<div className="w-full rounded-2xl border border-[#F3C4A7] bg-[#FFF5EC] px-5 py-4 text-center text-sm font-semibold text-[#9A4D18]">
-							Ordering is currently unavailable for this restaurant.
+							Service Temporarily Unavailable
+						</div>
+					) : !tableNumber ? (
+						<div className="space-y-3">
+							<div className="w-full rounded-2xl border border-[#D6E4F0] bg-white px-5 py-4 text-center text-sm font-semibold text-[#0A1628]">
+								Select your table number before placing this order.
+							</div>
+							<motion.button
+								whileTap={{ scale: 0.98 }}
+								onClick={() => router.push(`/${slug}`)}
+								className="w-full rounded-2xl border border-[#0F4C75] bg-white py-4 text-base font-bold text-[#0F4C75] transition-colors hover:bg-[#F7FBFE]"
+							>
+								Choose Table Number
+							</motion.button>
 						</div>
 					) : (
 						<motion.button

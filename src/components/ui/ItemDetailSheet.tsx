@@ -12,6 +12,7 @@ interface ItemDetailSheetProps {
 	onAddToCart: (item: MenuItem, quantity: number) => void;
 	locale?: "en" | "ar";
 	disabled?: boolean;
+	disabledMessage?: string;
 }
 
 export function ItemDetailSheet({
@@ -21,6 +22,7 @@ export function ItemDetailSheet({
 	onAddToCart,
 	locale = "en",
 	disabled = false,
+	disabledMessage,
 }: ItemDetailSheetProps) {
 	const [quantity, setQuantity] = useState(1);
 
@@ -131,10 +133,12 @@ export function ItemDetailSheet({
 								whileTap={{ scale: 0.98 }}
 								onClick={handleAddToCart}
 								disabled={disabled}
-								className="w-full py-4 bg-primary rounded-2xl text-white text-base font-bold flex items-center justify-center gap-2 transition-colors active:bg-primary/90 disabled:cursor-not-allowed disabled:bg-[#B0B8C4]"
+								className="w-full rounded-2xl bg-primary py-4 text-base font-bold text-white transition-colors active:bg-primary/90 disabled:cursor-not-allowed disabled:border disabled:border-[#F3C4A7] disabled:bg-[#FFF5EC] disabled:text-[#9A4D18]"
 							>
 								{disabled ? (
-									<span>Ordering is unavailable</span>
+									<span>
+										{disabledMessage ?? "Service Temporarily Unavailable"}
+									</span>
 								) : (
 									<>
 										<span>Add to Cart</span>

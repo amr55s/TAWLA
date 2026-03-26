@@ -1,11 +1,11 @@
 "use client";
 
 import { RotateCcw } from "lucide-react";
-import type { KdsOrderRow } from "@/types/kds";
 import {
 	formatElapsedMmSs,
 	useElapsedSecondsSince,
 } from "@/hooks/useElapsedSecondsSince";
+import type { KdsOrderRow } from "@/types/kds";
 
 export type SlaBand = "calm" | "warning" | "danger";
 
@@ -129,34 +129,34 @@ export function OrderCard({
 				})}
 			</ul>
 
-		<footer className="mt-auto border-t border-gray-200 bg-gray-50 p-3 space-y-2">
-			{isInKitchen && (
-				<button
-					type="button"
-					onClick={onBump}
-					disabled={bumping}
-					className="w-full min-h-[52px] rounded-xl bg-tawla-deep text-white text-lg font-bold shadow-sm
+			<footer className="mt-auto border-t border-gray-200 bg-gray-50 p-3 space-y-2">
+				{isInKitchen && (
+					<button
+						type="button"
+						onClick={onBump}
+						disabled={bumping}
+						className="w-full min-h-[52px] rounded-xl bg-tawla-deep text-white text-lg font-bold shadow-sm
             active:scale-[0.99] transition-transform disabled:opacity-60 disabled:pointer-events-none
             hover:bg-tawla-deep/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tawla-sky"
-				>
-					{bumping ? "Updating…" : "Mark as Ready"}
-				</button>
-			)}
+					>
+						{bumping ? "Updating…" : "Mark as Ready"}
+					</button>
+				)}
 
-			{isReady && (
-				<button
-					type="button"
-					onClick={onUndoPrep}
-					disabled={undoing}
-					className="w-full flex items-center justify-center gap-2 min-h-[44px] rounded-xl border-2 border-amber-400
+				{isReady && (
+					<button
+						type="button"
+						onClick={onUndoPrep}
+						disabled={undoing}
+						className="w-full flex items-center justify-center gap-2 min-h-[44px] rounded-xl border-2 border-amber-400
               bg-amber-50 text-amber-800 text-sm font-bold hover:bg-amber-100
               disabled:opacity-50"
-				>
-					<RotateCcw className="size-4 shrink-0" aria-hidden />
-					{undoing ? "Recalling…" : "Recall (back to kitchen)"}
-				</button>
-			)}
-		</footer>
+					>
+						<RotateCcw className="size-4 shrink-0" aria-hidden />
+						{undoing ? "Recalling…" : "Recall (back to preparing)"}
+					</button>
+				)}
+			</footer>
 		</article>
 	);
 }

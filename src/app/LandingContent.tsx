@@ -1,7 +1,5 @@
 "use client";
 
-import Image from "next/image";
-import { LogoBrand } from "@/components/ui/LogoBrand";
 import {
 	AnimatePresence,
 	motion,
@@ -23,6 +21,7 @@ import {
 	X,
 	Zap,
 } from "lucide-react";
+import Image from "next/image";
 import type React from "react";
 import {
 	createContext,
@@ -32,6 +31,7 @@ import {
 	useState,
 } from "react";
 import { toast } from "sonner";
+import { LogoBrand } from "@/components/ui/LogoBrand";
 
 /* ════════════════════════════════════════════════════
    TRANSLATION CONTEXT & DICTIONARY
@@ -45,15 +45,15 @@ const translations = {
 			features: "Features",
 			pricing: "Pricing",
 			blog: "Blog",
-			request_demo: "Try Beta Free",
+			request_demo: "Try Pro Features for 15 Days Free",
 			language: "Language",
 		},
 		hero: {
 			headline_1: "The Digital Engine for",
 			headline_2: "Modern Restaurants.",
 			subtitle:
-				"Tawla connects your guests, waiters, and cashiers in one seamless ecosystem. QR ordering, real-time floor management, and instant billing — all from day one.",
-			cta_primary: "Try Beta Free",
+				"Tawla connects your guests, waiters, and cashiers in one seamless ecosystem. QR ordering, real-time floor management, and instant billing — all from day one. Try Pro Features for 15 Days Free.",
+			cta_primary: "Try Pro Features for 15 Days Free",
 			cta_secondary: "See How It Works",
 			dashboard_alt: "Tawla dashboard preview",
 		},
@@ -89,20 +89,25 @@ const translations = {
 			heading_small: "Built for Real Restaurants",
 			heading_main: "Everything You Need, Nothing You Don't",
 			f1_title: "Cloud-Based",
-			f1_text: "Access your dashboard from anywhere. No hardware, no installation. Just log in.",
+			f1_text:
+				"Access your dashboard from anywhere. No hardware, no installation. Just log in.",
 			f2_title: "Multi-Language",
-			f2_text: "Full Arabic and English support with seamless RTL switching for both staff and guests.",
+			f2_text:
+				"Full Arabic and English support with seamless RTL switching for both staff and guests.",
 			f3_title: "Real-Time Sync",
-			f3_text: "Orders, table status, and calls update live across all screens. Zero refresh needed.",
+			f3_text:
+				"Orders, table status, and calls update live across all screens. Zero refresh needed.",
 			f4_title: "Secure Payments",
-			f4_text: "Role-based access, encrypted data, and auditable payment records for every transaction.",
+			f4_text:
+				"Role-based access, encrypted data, and auditable payment records for every transaction.",
 		},
 		pricing: {
 			heading_small: "Pricing",
 			heading_main: "Simple, Transparent Pricing",
 			subtitle: "No hidden fees. Start free, upgrade when you're ready.",
 			p1_name: "Starter",
-			p1_desc: "For smaller dining rooms, carts, and cafes that need disciplined service flow.",
+			p1_desc:
+				"For smaller dining rooms, carts, and cafes that need disciplined service flow.",
 			p1_f1: "15 Tables",
 			p1_f2: "QR Menu",
 			p1_f3: "Basic KDS",
@@ -111,18 +116,20 @@ const translations = {
 			p1_f6: "3 Staff accounts",
 			p1_f7: "Basic Analytics",
 			p1_f8: "Standard Email Support",
-			p2_name: "Professional",
+			p2_name: "Pro",
 			p2_badge: "15-Day Money-Back Guarantee",
-			p2_desc: "For restaurants that want the full single-branch operating system without clutter.",
+			p2_desc:
+				"For restaurants that want the full single-branch operating system without clutter.",
 			p2_f1: "Everything in Starter, plus:",
 			p2_f2: "30 Tables",
 			p2_f3: "300 Orders/mo",
-			p2_f4: "Full Kitchen Display System (Audio & Undo)",
+			p2_f4: "KDS with Sound",
 			p2_f5: "Advanced Waiter Tablet Flow",
 			p2_f6: "8 Staff Accounts",
-			p2_f7: "Priority WhatsApp Support",
+			p2_f7: "Advanced Analytics",
 			p3_name: "Enterprise",
-			p3_desc: "For multi-branch operators who need HQ visibility and serious control.",
+			p3_desc:
+				"For multi-branch operators who need HQ visibility and serious control.",
 			p3_f1: "Everything in Pro, plus:",
 			p3_f2: "Unlimited Tables & Orders",
 			p3_f3: "Multi-branch HQ Dashboard",
@@ -137,7 +144,8 @@ const translations = {
 		},
 		cta: {
 			headline: "Ready to modernize your restaurant?",
-			subtitle: "Join restaurants across the Gulf transforming their operations with Tawla.",
+			subtitle:
+				"Join restaurants across the Gulf transforming their operations with Tawla.",
 			placeholder: "Enter your email",
 			btn: "Join Tawla",
 		},
@@ -153,15 +161,15 @@ const translations = {
 			features: "المميزات",
 			pricing: "الباقات",
 			blog: "المدونة",
-			request_demo: "جرّب مجاناً",
+			request_demo: "جرّب مميزات البرو لمدة 15 يوم مجاناً",
 			language: "اللغة",
 		},
 		hero: {
 			headline_1: "المحرك الرقمي",
 			headline_2: "للمطاعم الحديثة.",
 			subtitle:
-				"طاولة تربط ضيوفك، طاقم الخدمة، والكاشير في منظومة واحدة سلسة. طلبات QR، إدارة صالة لحظية، وفوترة فورية — من اليوم الأول.",
-			cta_primary: "جرّب مجاناً",
+				"طاولة تربط ضيوفك، طاقم الخدمة، والكاشير في منظومة واحدة سلسة. طلبات QR، إدارة صالة لحظية، وفوترة فورية — من اليوم الأول. جرّب مميزات البرو لمدة 15 يوم مجاناً.",
+			cta_primary: "جرّب مميزات البرو لمدة 15 يوم مجاناً",
 			cta_secondary: "اكتشف كيف يعمل",
 			dashboard_alt: "معاينة لوحة تحكم طاولة",
 		},
@@ -210,7 +218,8 @@ const translations = {
 			heading_main: "تسعير بسيط وشفاف",
 			subtitle: "بدون رسوم خفية. ابدأ مجاناً، ورقّي وقتما تحب.",
 			p1_name: "البداية",
-			p1_desc: "لصالات الطعام الصغيرة، العربات، والمقاهي التي تحتاج إلى تدفق خدمة منظم.",
+			p1_desc:
+				"لصالات الطعام الصغيرة، العربات، والمقاهي التي تحتاج إلى تدفق خدمة منظم.",
 			p1_f1: "١٥ طاولة",
 			p1_f2: "منيو QR",
 			p1_f3: "نظام KDS أساسي",
@@ -219,18 +228,19 @@ const translations = {
 			p1_f6: "٣ حسابات موظفين",
 			p1_f7: "تحليلات أساسية",
 			p1_f8: "دعم بريد إلكتروني قياسي",
-			p2_name: "الاحترافية",
+			p2_name: "البرو",
 			p2_badge: "ضمان استرداد ١٥ يوماً",
 			p2_desc: "للمطاعم التي تريد نظام تشغيل كامل لفرع واحد بدون تعقيدات.",
 			p2_f1: "كل ما في الباقة المبتدئة، بالإضافة إلى:",
 			p2_f2: "٣٠ طاولة",
 			p2_f3: "٣٠٠ طلب/شهر",
-			p2_f4: "نظام مطبخ كامل (صوت وتراجع)",
+			p2_f4: "نظام KDS مع الصوت",
 			p2_f5: "تدفق متقدم لجهاز الويتر",
 			p2_f6: "٨ حسابات موظفين",
-			p2_f7: "دعم واتساب ذو أولوية",
+			p2_f7: "تحليلات متقدمة",
 			p3_name: "الشركات",
-			p3_desc: "لمشغلي الفروع المتعددة الذين يحتاجون إلى رؤية المقر الرئيسي وتحكم جاد.",
+			p3_desc:
+				"لمشغلي الفروع المتعددة الذين يحتاجون إلى رؤية المقر الرئيسي وتحكم جاد.",
 			p3_f1: "كل ما في الباقة الاحترافية، بالإضافة إلى:",
 			p3_f2: "طاولات وطلبات بلا حدود",
 			p3_f3: "لوحة تحكم المقر الرئيسي",
@@ -285,7 +295,9 @@ function LanguageProvider({ children }: { children: React.ReactNode }) {
 	);
 
 	return (
-		<LanguageContext.Provider value={{ lang, setLang, t, isRTL: lang === "ar" }}>
+		<LanguageContext.Provider
+			value={{ lang, setLang, t, isRTL: lang === "ar" }}
+		>
 			{children}
 		</LanguageContext.Provider>
 	);
@@ -293,7 +305,8 @@ function LanguageProvider({ children }: { children: React.ReactNode }) {
 
 function useTranslation() {
 	const context = useContext(LanguageContext);
-	if (!context) throw new Error("useTranslation must be used within LanguageProvider");
+	if (!context)
+		throw new Error("useTranslation must be used within LanguageProvider");
 	return context;
 }
 
@@ -440,7 +453,7 @@ function Header() {
 							Sign In
 						</a>
 						<a
-							href="/register"
+							href="/signup"
 							className={`inline-flex items-center justify-center rounded-full bg-tawla-deep text-white font-semibold
 								hover:bg-tawla-dark hover:scale-[1.03] active:scale-[0.98] transition-all duration-500
 								shadow-[0_4px_14px_rgba(15,76,117,0.25)] whitespace-nowrap ${
@@ -478,7 +491,9 @@ function Header() {
 						</a>
 					))}
 					<div className="flex items-center justify-between mt-3 mb-4">
-						<span className="text-xs text-tawla-muted font-medium">{t("nav.language")}</span>
+						<span className="text-xs text-tawla-muted font-medium">
+							{t("nav.language")}
+						</span>
 						<LangToggle />
 					</div>
 					<div className="flex flex-col gap-2">
@@ -489,7 +504,7 @@ function Header() {
 							Sign In
 						</a>
 						<a
-							href="/register"
+							href="/signup"
 							className="block text-center py-3 rounded-full bg-tawla-deep text-white text-sm font-semibold"
 						>
 							{t("nav.request_demo")}
@@ -508,7 +523,7 @@ function HeroSection() {
 	const { t, lang, isRTL } = useTranslation();
 
 	return (
-		<section className="relative min-h-[90vh] flex items-center pt-28 pb-16 overflow-hidden bg-[#f1f7fc]">
+		<section className="relative min-h-[90vh] flex items-center pt-28 pb-16 overflow-hidden bg-white">
 			{/* Subtle radial glow */}
 			<div className="absolute top-[15%] start-1/2 -translate-x-1/2 w-[800px] h-[800px] rounded-full bg-tawla-ice/10 blur-[160px] pointer-events-none" />
 
@@ -520,18 +535,22 @@ function HeroSection() {
 					transition={{ duration: 0.8, ease: [0.25, 0.4, 0.25, 1] }}
 					className="text-center max-w-[760px] mx-auto mb-14"
 				>
-					<h1 className={`text-[40px] md:text-[56px] lg:text-[68px] leading-[1.06] font-bold text-tawla-ink tracking-tight mb-6 ${isRTL ? "font-[family-name:var(--font-din-next)]" : "font-sans"}`}>
+					<h1
+						className={`text-[40px] md:text-[56px] lg:text-[68px] leading-[1.06] font-bold text-tawla-ink tracking-tight mb-6 ${isRTL ? "font-[family-name:var(--font-din-next)]" : "font-sans"}`}
+					>
 						{t("hero.headline_1")}{" "}
 						<span className="text-tawla-deep">{t("hero.headline_2")}</span>
 					</h1>
 
-					<p className={`text-lg md:text-xl text-tawla-body-blue leading-relaxed max-w-[600px] mx-auto mb-10 ${isRTL ? "font-[family-name:var(--font-din-next)]" : ""}`}>
+					<p
+						className={`text-lg md:text-xl text-tawla-body-blue leading-relaxed max-w-[600px] mx-auto mb-10 ${isRTL ? "font-[family-name:var(--font-din-next)]" : ""}`}
+					>
 						{t("hero.subtitle")}
 					</p>
 
 					<div className="flex flex-col sm:flex-row gap-4 justify-center">
 						<a
-							href="/register"
+							href="/signup"
 							className="inline-flex items-center justify-center px-8 py-4 rounded-full bg-tawla-deep text-white font-semibold text-base
 								hover:bg-tawla-dark hover:scale-[1.03] active:scale-[0.98] transition-all duration-300
 								shadow-[0_8px_24px_rgba(15,76,117,0.3)]"
@@ -632,7 +651,9 @@ function JourneySection() {
 				<span className="text-[11px] font-semibold text-tawla-sky tracking-[0.2em] uppercase block mb-4">
 					{t("journey.heading_small")}
 				</span>
-				<h2 className={`text-[34px] md:text-[44px] font-bold text-tawla-ink tracking-tight ${isRTL ? "font-[family-name:var(--font-din-next)]" : "font-sans"}`}>
+				<h2
+					className={`text-[34px] md:text-[44px] font-bold text-tawla-ink tracking-tight ${isRTL ? "font-[family-name:var(--font-din-next)]" : "font-sans"}`}
+				>
 					{t("journey.heading_main")}
 				</h2>
 			</Reveal>
@@ -655,7 +676,9 @@ function JourneySection() {
 							>
 								<TabIcon size={16} />
 								<span className="hidden sm:inline">{t(s.tabKey)}</span>
-								<span className={`sm:hidden text-[10px] font-bold ${isActive ? "text-tawla-deep" : "text-tawla-muted"}`}>
+								<span
+									className={`sm:hidden text-[10px] font-bold ${isActive ? "text-tawla-deep" : "text-tawla-muted"}`}
+								>
 									{s.stepLabel}
 								</span>
 							</button>
@@ -678,24 +701,33 @@ function JourneySection() {
 					>
 						{/* Text side */}
 						<div className={active === 1 ? "lg:order-2" : ""}>
-							<div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r ${step.accent} mb-6`}>
+							<div
+								className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r ${step.accent} mb-6`}
+							>
 								<Icon size={14} className={step.iconColor} />
 								<span className="text-[11px] font-bold text-tawla-deep tracking-wider uppercase">
 									{t(step.tabKey)}
 								</span>
 							</div>
 
-							<h3 className={`text-[28px] md:text-[36px] font-bold text-tawla-ink tracking-tight mb-4 ${isRTL ? "font-[family-name:var(--font-din-next)]" : "font-sans"}`}>
+							<h3
+								className={`text-[28px] md:text-[36px] font-bold text-tawla-ink tracking-tight mb-4 ${isRTL ? "font-[family-name:var(--font-din-next)]" : "font-sans"}`}
+							>
 								{t(step.titleKey)}
 							</h3>
 
-							<p className={`text-base text-tawla-body-blue leading-relaxed mb-8 ${isRTL ? "font-[family-name:var(--font-din-next)]" : ""}`}>
+							<p
+								className={`text-base text-tawla-body-blue leading-relaxed mb-8 ${isRTL ? "font-[family-name:var(--font-din-next)]" : ""}`}
+							>
 								{t(step.textKey)}
 							</p>
 
 							<ul className="space-y-3.5">
 								{step.bullets.map((bKey) => (
-									<li key={bKey} className="flex items-center gap-3 text-sm text-tawla-body-blue">
+									<li
+										key={bKey}
+										className="flex items-center gap-3 text-sm text-tawla-body-blue"
+									>
 										<div className="w-5 h-5 rounded-full bg-tawla-ice/60 flex items-center justify-center shrink-0">
 											<Check className="w-3 h-3 text-tawla-deep" />
 										</div>
@@ -706,8 +738,10 @@ function JourneySection() {
 						</div>
 
 						{/* Screenshot — mobile phone frame or landscape desktop frame */}
-						<div className={`flex justify-center ${active === 1 ? "lg:order-1" : ""}`}>
-							{(active === 0 || active === 1) ? (
+						<div
+							className={`flex justify-center ${active === 1 ? "lg:order-1" : ""}`}
+						>
+							{active === 0 || active === 1 ? (
 								/* Portrait mobile phone mockup */
 								<div className="relative max-w-[280px] sm:max-w-[320px] w-full aspect-[9/19.5] mx-auto rounded-[2.5rem] border-[8px] border-white shadow-2xl overflow-hidden">
 									<Image
@@ -754,16 +788,22 @@ function FeaturesSection() {
 		{ icon: Cloud, titleKey: "features.f1_title", textKey: "features.f1_text" },
 		{ icon: Globe, titleKey: "features.f2_title", textKey: "features.f2_text" },
 		{ icon: Zap, titleKey: "features.f3_title", textKey: "features.f3_text" },
-		{ icon: ShieldCheck, titleKey: "features.f4_title", textKey: "features.f4_text" },
+		{
+			icon: ShieldCheck,
+			titleKey: "features.f4_title",
+			textKey: "features.f4_text",
+		},
 	];
 
 	return (
-		<Section id="features" className="bg-[#f1f7fc]">
+		<Section id="features" className="bg-white">
 			<Reveal className="text-center mb-16">
 				<span className="text-[11px] font-semibold text-tawla-sky tracking-[0.2em] uppercase block mb-4">
 					{t("features.heading_small")}
 				</span>
-				<h2 className={`text-[34px] md:text-[44px] font-bold text-tawla-ink tracking-tight ${isRTL ? "font-[family-name:var(--font-din-next)]" : "font-sans"}`}>
+				<h2
+					className={`text-[34px] md:text-[44px] font-bold text-tawla-ink tracking-tight ${isRTL ? "font-[family-name:var(--font-din-next)]" : "font-sans"}`}
+				>
 					{t("features.heading_main")}
 				</h2>
 			</Reveal>
@@ -785,7 +825,9 @@ function FeaturesSection() {
 						<div className="w-11 h-11 rounded-xl bg-tawla-ice/40 flex items-center justify-center mb-5 group-hover:bg-tawla-ice group-hover:scale-110 transition-all duration-500">
 							<f.icon className="w-5 h-5 text-tawla-sky" />
 						</div>
-						<h3 className={`text-base font-bold text-tawla-ink mb-2 ${isRTL ? "font-[family-name:var(--font-din-next)]" : ""}`}>
+						<h3
+							className={`text-base font-bold text-tawla-ink mb-2 ${isRTL ? "font-[family-name:var(--font-din-next)]" : ""}`}
+						>
 							{t(f.titleKey)}
 						</h3>
 						<p className="text-sm leading-relaxed text-tawla-body-blue">
@@ -871,7 +913,9 @@ function PricingSection() {
 				<span className="text-[11px] font-semibold text-tawla-sky tracking-[0.2em] uppercase block mb-4">
 					{t("pricing.heading_small")}
 				</span>
-				<h2 className={`text-[34px] md:text-[44px] font-bold text-tawla-ink tracking-tight ${isRTL ? "font-[family-name:var(--font-din-next)]" : "font-sans"}`}>
+				<h2
+					className={`text-[34px] md:text-[44px] font-bold text-tawla-ink tracking-tight ${isRTL ? "font-[family-name:var(--font-din-next)]" : "font-sans"}`}
+				>
 					{t("pricing.heading_main")}
 				</h2>
 				<p className="mt-4 text-base text-tawla-body-blue max-w-md mx-auto">
@@ -901,24 +945,37 @@ function PricingSection() {
 								{p.badge}
 							</div>
 						)}
-						<h3 className={`text-lg font-bold text-tawla-ink mb-1 ${isRTL ? "font-[family-name:var(--font-din-next)]" : ""}`}>
+						<h3
+							className={`text-lg font-bold text-tawla-ink mb-1 ${isRTL ? "font-[family-name:var(--font-din-next)]" : ""}`}
+						>
 							{p.name}
 						</h3>
 						<div className="flex items-baseline gap-1 mb-3">
-							<span className="text-[36px] font-bold text-tawla-ink">{p.price}</span>
-							{p.period && <span className="text-sm text-tawla-muted">{p.period}</span>}
+							<span className="text-[36px] font-bold text-tawla-ink">
+								{p.price}
+							</span>
+							{p.period && (
+								<span className="text-sm text-tawla-muted">{p.period}</span>
+							)}
 						</div>
 						<p className="text-sm text-tawla-body-blue mb-6">{p.desc}</p>
 						<ul className="space-y-3 mb-8">
 							{p.features.map((f) => (
-								<li key={f} className="flex items-center gap-2.5 text-sm text-tawla-body-blue">
+								<li
+									key={f}
+									className="flex items-center gap-2.5 text-sm text-tawla-body-blue"
+								>
 									<Check className="w-4 h-4 text-tawla-sky shrink-0" />
 									{f}
 								</li>
 							))}
 						</ul>
 						<a
-							href={p.id === "enterprise" ? "#contact" : `/register${p.id === "starter" ? "" : `?plan=${p.id}`}`}
+							href={
+								p.id === "enterprise"
+									? "#contact"
+									: `/signup${p.id === "starter" ? "" : `?plan=${p.id}`}`
+							}
 							className={`block text-center py-3 rounded-full font-semibold text-sm transition-all duration-300 ${
 								p.highlighted
 									? "bg-tawla-deep text-white hover:bg-tawla-dark shadow-[0_4px_14px_rgba(15,76,117,0.25)]"
@@ -940,12 +997,17 @@ function PricingSection() {
 function CTASection() {
 	const { t, isRTL } = useTranslation();
 	return (
-		<section id="contact" className="relative py-24 lg:py-32 bg-tawla-deep overflow-hidden">
+		<section
+			id="contact"
+			className="relative py-24 lg:py-32 bg-tawla-deep overflow-hidden"
+		>
 			<div className="absolute top-0 end-0 w-[400px] h-[400px] rounded-full bg-tawla-sky/10 blur-[120px]" />
 			<div className="absolute bottom-0 start-0 w-[300px] h-[300px] rounded-full bg-tawla-ice/5 blur-[100px]" />
 
 			<Reveal className="relative max-w-[640px] mx-auto px-6 text-center">
-				<h2 className={`text-[32px] md:text-[44px] font-bold text-white tracking-tight mb-6 ${isRTL ? "font-[family-name:var(--font-din-next)]" : "font-sans"}`}>
+				<h2
+					className={`text-[32px] md:text-[44px] font-bold text-white tracking-tight mb-6 ${isRTL ? "font-[family-name:var(--font-din-next)]" : "font-sans"}`}
+				>
 					{t("cta.headline")}
 				</h2>
 				<p className="text-base text-tawla-ice/80 mb-10">{t("cta.subtitle")}</p>
@@ -1002,14 +1064,20 @@ function Footer() {
 					))}
 					<a
 						href="#"
-						onClick={(e) => { e.preventDefault(); toast.info("Privacy Policy coming soon"); }}
+						onClick={(e) => {
+							e.preventDefault();
+							toast.info("Privacy Policy coming soon");
+						}}
 						className="hover:text-white/80 transition-colors"
 					>
 						{t("footer.privacy")}
 					</a>
 					<a
 						href="#"
-						onClick={(e) => { e.preventDefault(); toast.info("Terms of Service coming soon"); }}
+						onClick={(e) => {
+							e.preventDefault();
+							toast.info("Terms of Service coming soon");
+						}}
 						className="hover:text-white/80 transition-colors"
 					>
 						{t("footer.terms")}
@@ -1039,7 +1107,7 @@ function LandingContentInner() {
 	return (
 		<div
 			suppressHydrationWarning
-			className="bg-[#f1f7fc] font-sans text-tawla-body-blue overflow-x-hidden"
+			className="bg-white font-sans text-tawla-body-blue overflow-x-hidden"
 			dir={lang === "ar" ? "rtl" : "ltr"}
 		>
 			<Header />

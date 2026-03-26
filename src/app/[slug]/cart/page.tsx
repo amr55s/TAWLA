@@ -4,15 +4,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import * as React from "react";
-import { useEffect, useState } from "react";
-import {
-	BackButton,
-	CartItemCard,
-	FloatingNavBar,
-	PageHeader,
-} from "@/components/ui";
-import { isRestaurantOrderingUnavailable } from "@/lib/billing/subscription-status";
-import { getRestaurantBySlugClient } from "@/lib/data/orders.client";
+import { CartItemCard, FloatingNavBar } from "@/components/ui";
+import { useRestaurantOrderingAvailability } from "@/hooks/useRestaurantOrderingAvailability";
 import { useCartStore } from "@/store/cart";
 
 const SERVICE_FEE_PERCENTAGE = 10;
@@ -24,10 +17,11 @@ export default function CartPage({
 }) {
 	const router = useRouter();
 	const { slug } = React.use(params);
-	const [orderingUnavailable, setOrderingUnavailable] = useState(false);
+	const orderingUnavailable = useRestaurantOrderingAvailability(slug, false);
 
 	const {
 		items,
+		tableNumber,
 		updateQuantity,
 		removeItem,
 		getSubtotal,
@@ -36,32 +30,10 @@ export default function CartPage({
 		getTotalItems,
 	} = useCartStore();
 
-	const subtotal = getSubtotal();
-	const serviceFee = getServiceFee(SERVICE_FEE_PERCENTAGE);
+	const _subtotal = getSubtotal();
+	const _serviceFee = getServiceFee(SERVICE_FEE_PERCENTAGE);
 	const total = getTotal(SERVICE_FEE_PERCENTAGE);
 	const cartCount = getTotalItems();
-
-	useEffect(() => {
-		let cancelled = false;
-
-		(async () => {
-			const restaurant = await getRestaurantBySlugClient(slug);
-			if (!restaurant || cancelled) return;
-
-			setOrderingUnavailable(
-				isRestaurantOrderingUnavailable({
-					plan: restaurant.plan,
-					trialEndsAt: restaurant.trial_ends_at,
-					subscriptionStatus: restaurant.subscription_status,
-					isActive: restaurant.is_active,
-				}),
-			);
-		})();
-
-		return () => {
-			cancelled = true;
-		};
-	}, [slug]);
 
 	const handleProceed = () => {
 		if (orderingUnavailable) {
@@ -158,7 +130,20 @@ export default function CartPage({
 					{/* Checkout Button */}
 					{orderingUnavailable ? (
 						<div className="w-full rounded-2xl border border-[#F3C4A7] bg-[#FFF5EC] px-5 py-4 text-center text-sm font-semibold text-[#9A4D18]">
-							Ordering is currently unavailable for this restaurant.
+							Service Temporarily Unavailable
+						</div>
+					) : !tableNumber ? (
+						<div className="space-y-3">
+							<div className="w-full rounded-2xl border border-[#D6E4F0] bg-white px-5 py-4 text-center text-sm font-semibold text-[#0A1628]">
+								Select your table number before continuing to checkout.
+							</div>
+							<motion.button
+								whileTap={{ scale: 0.98 }}
+								onClick={() => router.push(`/${slug}`)}
+								className="w-full rounded-2xl border border-[#0F4C75] bg-white py-4 text-base font-bold text-[#0F4C75] transition-colors hover:bg-[#F7FBFE]"
+							>
+								Choose Table Number
+							</motion.button>
 						</div>
 					) : (
 						<motion.button

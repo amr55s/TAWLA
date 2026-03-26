@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
-import { type KdsOrderRow, type KdsOrderStatusUpdate } from "@/types/kds";
+import { isRestaurantOrderingUnavailable } from "@/lib/billing/subscription-status";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import type { KdsOrderRow, KdsOrderStatusUpdate } from "@/types/kds";
 
 const KDS_QUEUE_STATUSES = ["in_kitchen", "ready"] as const;
 
@@ -54,7 +55,6 @@ async function getVerifiedStaffForKds(
 
 	return { ok: true, staff: parsed };
 }
-
 
 function unwrapOne<T>(x: T | T[] | null | undefined): T | null {
 	if (x == null) return null;
@@ -154,11 +154,35 @@ export async function updateOrderStatus(
 		return { ok: false, error: fetchError?.message ?? "Order not found" };
 	}
 
+	// ── Auth ──
 	const auth = await getVerifiedStaffForKds(order.restaurant_id);
 	if (!auth.ok) {
 		return { ok: false, error: auth.error };
 	}
 	const { staff } = auth;
+
+	// ── Subscription / Ordering Freeze check ──
+	const admin = createAdminClient();
+	const { data: restaurant } = await admin
+		.from("restaurants")
+		.select("plan, trial_ends_at, subscription_status, is_active")
+		.eq("id", order.restaurant_id)
+		.maybeSingle();
+
+	if (
+		restaurant &&
+		isRestaurantOrderingUnavailable({
+			plan: restaurant.plan,
+			trialEndsAt: restaurant.trial_ends_at,
+			subscriptionStatus: restaurant.subscription_status,
+			isActive: restaurant.is_active,
+		})
+	) {
+		return {
+			ok: false,
+			error: "Subscription expired – order updates are disabled",
+		};
+	}
 
 	const prev = order.status as string;
 
@@ -173,7 +197,8 @@ export async function updateOrderStatus(
 		return { ok: false, error: "Invalid status transition" };
 	}
 
-	const { error: updateError } = await supabase
+	// ── Write using admin client (ensures Realtime fires, bypasses RLS) ──
+	const { error: updateError } = await admin
 		.from("orders")
 		.update({ status: newStatus })
 		.eq("id", orderId)

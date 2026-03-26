@@ -15,16 +15,20 @@ import {
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import * as React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import {
+	clearTableServerSide,
+	resolveWaiterCallServerSide,
+	updateOrderStatusServerSide,
+} from "@/app/actions/orders.actions";
+import { useAudioAlert } from "@/hooks/useAudioAlert";
+import { useRestaurantRealtime } from "@/hooks/useRestaurantRealtime";
+import { useSmartPresence } from "@/hooks/useSmartPresence";
 import { getRestaurantBySlugClient } from "@/lib/data/orders.client";
-import { markOrderAsDelivered } from "@/app/actions/orders.actions";
+import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/client";
 import type { OrderWithItems, Restaurant } from "@/types/database";
-import { useAudioAlert } from "@/hooks/useAudioAlert";
-import { useSmartPresence } from "@/hooks/useSmartPresence";
-import { useRestaurantRealtime } from "@/hooks/useRestaurantRealtime";
-import { logger } from "@/lib/logger";
 
 interface WaiterActiveOrder {
 	id: string;
@@ -41,14 +45,21 @@ interface WaiterActiveCall {
 	tables: { table_number: number };
 }
 
-const supabase = createClient();
 const WAITER_ACTIVE_ORDER_STATUSES = [
 	"in_kitchen",
 	"ready",
 	"delivered",
 ] as const;
 
-type TableStatus = "empty" | "calling" | "pending" | "in_kitchen" | "food_ready" | "dining";
+const _supabase = createClient();
+
+type TableStatus =
+	| "empty"
+	| "calling"
+	| "pending"
+	| "in_kitchen"
+	| "food_ready"
+	| "dining";
 type StatusFilter = "all" | TableStatus;
 
 interface TableWithStatus {
@@ -65,11 +76,15 @@ export default function WaiterDashboardPage({
 }) {
 	const router = useRouter();
 	const { slug } = React.use(params);
+	// Anon client used only for READ operations (fetches, realtime). All writes go through Server Actions.
+	const supabase = React.useMemo(() => createClient(), []);
 
 	const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
 	const [activeOrders, setActiveOrders] = useState<WaiterActiveOrder[]>([]);
 	const [activeCalls, setActiveCalls] = useState<WaiterActiveCall[]>([]);
-	const [physicalTables, setPhysicalTables] = useState<{ id: string, table_number: number }[]>([]);
+	const [physicalTables, setPhysicalTables] = useState<
+		{ id: string; table_number: number }[]
+	>([]);
 	const [tableMap, setTableMap] = useState<Record<string, number>>({});
 	const [isLoading, setIsLoading] = useState(true);
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -142,7 +157,7 @@ export default function WaiterDashboardPage({
 					.eq("restaurant_id", restaurantData.id);
 				if (tablesData) {
 					setPhysicalTables(tablesData);
-					tablesData.forEach((t) => {
+					tablesData.forEach((t: { id: string; table_number: number }) => {
 						map[t.id] = t.table_number;
 					});
 				}
@@ -183,13 +198,15 @@ export default function WaiterDashboardPage({
 		} finally {
 			setIsLoading(false);
 		}
-	}, [slug, router]);
+	}, [slug, router, supabase.from]);
 
 	const tables = React.useMemo(() => {
 		const dynamicTables: TableWithStatus[] = [];
 		if (physicalTables.length === 0) return dynamicTables;
 
-		const sortedTables = [...physicalTables].sort((a, b) => a.table_number - b.table_number);
+		const sortedTables = [...physicalTables].sort(
+			(a, b) => a.table_number - b.table_number,
+		);
 
 		for (const pt of sortedTables) {
 			const i = pt.table_number;
@@ -205,7 +222,7 @@ export default function WaiterDashboardPage({
 					["pending", ...WAITER_ACTIVE_ORDER_STATUSES].includes(o.status),
 			);
 
-		let callType: "assistance" | "bill" | undefined;
+			let callType: "assistance" | "bill" | undefined;
 			if (currentCalls.length > 0) {
 				status = "calling";
 				callType = currentCalls[0].type as "assistance" | "bill";
@@ -239,58 +256,76 @@ export default function WaiterDashboardPage({
 	}, [loadData]);
 
 	useRestaurantRealtime(restaurant?.id, {
-		onOrderChange: React.useCallback((payload: any) => {
-			if (
-				restaurant?.plan === "pro" &&
-				payload.eventType === "INSERT" &&
-				payload.new?.created_at
-			) {
-				const createdAt = new Date(payload.new.created_at);
-				const monthStart = new Date();
-				monthStart.setDate(1);
-				monthStart.setHours(0, 0, 0, 0);
-				if (createdAt >= monthStart) {
-					setMonthlyOrdersCount((prev) => prev + 1);
+		onOrderChange: React.useCallback(
+			(payload: any) => {
+				if (
+					restaurant?.plan === "pro" &&
+					payload.eventType === "INSERT" &&
+					payload.new?.created_at
+				) {
+					const createdAt = new Date(payload.new.created_at);
+					const monthStart = new Date();
+					monthStart.setDate(1);
+					monthStart.setHours(0, 0, 0, 0);
+					if (createdAt >= monthStart) {
+						setMonthlyOrdersCount((prev) => prev + 1);
+					}
 				}
-			}
-			if (payload.eventType === "INSERT") playNotificationSound();
-			if (payload.eventType === "UPDATE" && payload.new?.status === "ready" && payload.old?.status !== "ready") { 
-				playNotificationSound(); 
-			}
-			setActiveOrders((prev) => {
-				if (payload.eventType === "INSERT") return [payload.new as WaiterActiveOrder, ...prev];
-				if (payload.eventType === "UPDATE") {
-					const exists = prev.some((o) => o.id === payload.new.id);
-					if (exists)
-						return prev.map((o) => o.id === payload.new.id ? { ...o, ...payload.new } : o);
-					return [payload.new as WaiterActiveOrder, ...prev];
+				if (payload.eventType === "INSERT") playNotificationSound();
+				if (
+					payload.eventType === "UPDATE" &&
+					payload.new?.status === "ready" &&
+					payload.old?.status !== "ready"
+				) {
+					playNotificationSound();
 				}
-				if (payload.eventType === "DELETE") return prev.filter((o) => o.id !== payload.old.id);
-				return prev;
-			});
-		}, [playNotificationSound, restaurant?.plan]),
+				setActiveOrders((prev) => {
+					if (payload.eventType === "INSERT")
+						return [payload.new as WaiterActiveOrder, ...prev];
+					if (payload.eventType === "UPDATE") {
+						const exists = prev.some((o) => o.id === payload.new.id);
+						if (exists)
+							return prev.map((o) =>
+								o.id === payload.new.id ? { ...o, ...payload.new } : o,
+							);
+						return [payload.new as WaiterActiveOrder, ...prev];
+					}
+					if (payload.eventType === "DELETE")
+						return prev.filter((o) => o.id !== payload.old.id);
+					return prev;
+				});
+			},
+			[playNotificationSound, restaurant?.plan],
+		),
 
-		onCallChange: React.useCallback((payload: any) => {
-			if (payload.eventType === "INSERT") playNotificationSound();
-			setActiveCalls((prev) => {
-				if (payload.eventType === "INSERT") return [payload.new as WaiterActiveCall, ...prev];
-				if (payload.eventType === "UPDATE") {
-					const exists = prev.some((c) => c.id === payload.new.id);
-					if (exists)
-						return prev.map((c) => c.id === payload.new.id ? { ...c, ...payload.new } : c);
-					return [payload.new as WaiterActiveCall, ...prev];
-				}
-				if (payload.eventType === "DELETE") return prev.filter((c) => c.id !== payload.old.id);
-				return prev;
-			});
-		}, [playNotificationSound]),
+		onCallChange: React.useCallback(
+			(payload: any) => {
+				if (payload.eventType === "INSERT") playNotificationSound();
+				setActiveCalls((prev) => {
+					if (payload.eventType === "INSERT")
+						return [payload.new as WaiterActiveCall, ...prev];
+					if (payload.eventType === "UPDATE") {
+						const exists = prev.some((c) => c.id === payload.new.id);
+						if (exists)
+							return prev.map((c) =>
+								c.id === payload.new.id ? { ...c, ...payload.new } : c,
+							);
+						return [payload.new as WaiterActiveCall, ...prev];
+					}
+					if (payload.eventType === "DELETE")
+						return prev.filter((c) => c.id !== payload.old.id);
+					return prev;
+				});
+			},
+			[playNotificationSound],
+		),
 
 		onRestaurantChange: React.useCallback((payload: any) => {
 			setRestaurant((prev) => ({ ...(prev as any), ...(payload.new as any) }));
-		}, [])
+		}, []),
 	});
 
-	const getOrderTableNum = (o: any): string =>
+	const _getOrderTableNum = (o: any): string =>
 		String(o.tables?.table_number ?? tableMap[o.table_id] ?? "");
 
 	const handleTableClick = async (table: TableWithStatus) => {
@@ -313,7 +348,10 @@ export default function WaiterDashboardPage({
 				return;
 			}
 
-			const allActiveStatuses = ["pending", ...WAITER_ACTIVE_ORDER_STATUSES] as string[];
+			const allActiveStatuses = [
+				"pending",
+				...WAITER_ACTIVE_ORDER_STATUSES,
+			] as string[];
 
 			// Fetch ALL active orders for this table to support multi-round ordering
 			const { data: ordersData, error } = await supabase
@@ -337,7 +375,6 @@ export default function WaiterDashboardPage({
 		if (!selectedTable || !restaurant?.id) return;
 		setIsConfirming(true);
 
-		// Confirm ALL pending orders for the table at once
 		const pendingOrderIds = tableOrders
 			.filter((o) => o.status === "pending")
 			.map((o) => o.id);
@@ -349,24 +386,30 @@ export default function WaiterDashboardPage({
 		}
 
 		try {
-			const { error } = await supabase
-				.from("orders")
-				.update({ status: "in_kitchen" })
-				.in("id", pendingOrderIds)
-				.eq("restaurant_id", restaurant.id);
+			const results = await Promise.all(
+				pendingOrderIds.map((id) =>
+					updateOrderStatusServerSide(id, "in_kitchen", restaurant.id),
+				),
+			);
 
-			if (error) throw error;
+			const failed = results.filter((r) => !r.ok);
+			if (failed.length > 0) {
+				toast.error(failed[0]?.error ?? "Failed to confirm order");
+				return;
+			}
 
 			posthog.capture("waiter_order_confirmed", {
 				table_number: selectedTable?.table_number,
 				order_ids: pendingOrderIds,
 				restaurant_slug: slug,
 			});
-			toast.success(`${pendingOrderIds.length > 1 ? `${pendingOrderIds.length} orders` : "Order"} sent to kitchen`);
+			toast.success(
+				`${pendingOrderIds.length > 1 ? `${pendingOrderIds.length} orders` : "Order"} moved to preparing`,
+			);
 			setSelectedTable(null);
 			setTableOrders([]);
 		} catch (e) {
-			console.error("Confirm failed", e);
+			logger.error("Confirm failed", e);
 			toast.error("Failed to confirm order");
 		} finally {
 			setIsConfirming(false);
@@ -392,29 +435,16 @@ export default function WaiterDashboardPage({
 			);
 
 			if (tableUuid) {
-				const { error: cancelOrdersError } = await supabase
-					.from("orders")
-					.update({ status: "cancelled" })
-					.eq("table_id", tableUuid)
-					.in("status", [
-						"pending",
-						...WAITER_ACTIVE_ORDER_STATUSES,
-					] as string[])
-					.eq("restaurant_id", restaurant.id);
-				if (cancelOrdersError) throw cancelOrdersError;
-
-				const { error: resolveCallsError } = await supabase
-					.from("waiter_calls")
-					.update({ status: "resolved" })
-					.eq("table_id", tableUuid)
-					.eq("status", "active")
-					.eq("restaurant_id", restaurant.id);
-				if (resolveCallsError) throw resolveCallsError;
+				const result = await clearTableServerSide(tableUuid, restaurant.id);
+				if (!result.ok) {
+					toast.error(result.error ?? "Failed to clear table");
+					return;
+				}
 			}
 
 			toast.success("Table cleared");
 		} catch (e) {
-			console.error("Clear table failed", e);
+			logger.error("Clear table failed", e);
 			toast.error("Failed to clear table");
 		} finally {
 			setIsClearing(false);
@@ -422,17 +452,28 @@ export default function WaiterDashboardPage({
 	};
 
 	const handleMarkServed = async () => {
+		if (!restaurant?.id) return;
 		setIsServing(true);
 		try {
 			const readyOrders = tableOrders.filter((o) => o.status === "ready");
-			for (const order of readyOrders) {
-				await markOrderAsDelivered(order.id);
+			const results = await Promise.all(
+				readyOrders.map((o) =>
+					updateOrderStatusServerSide(o.id, "delivered", restaurant.id),
+				),
+			);
+			const failed = results.filter((r) => !r.ok);
+			if (failed.length > 0) {
+				toast.error(failed[0]?.error ?? "Failed to mark as served");
+				return;
 			}
-		setTableOrders((prev) =>
-			prev.map((o) => (o.status === "ready" ? { ...o, status: "delivered" } : o))
-		);
+			setTableOrders((prev) =>
+				prev.map((o) =>
+					o.status === "ready" ? { ...o, status: "delivered" } : o,
+				),
+			);
 			toast.success("Marked as served!");
 		} catch (e) {
+			logger.error("Failed to mark as served", e);
 			toast.error("Failed to mark as served");
 		} finally {
 			setIsServing(false);
@@ -448,13 +489,14 @@ export default function WaiterDashboardPage({
 				(key) => String(tableMap[key]) === clickedTableNum,
 			);
 			if (tableUuid) {
-				const { error } = await supabase
-					.from("waiter_calls")
-					.update({ status: "resolved" })
-					.eq("table_id", tableUuid)
-					.eq("status", "active")
-					.eq("restaurant_id", restaurant.id);
-				if (error) throw error;
+				const result = await resolveWaiterCallServerSide(
+					tableUuid,
+					restaurant.id,
+				);
+				if (!result.ok) {
+					toast.error(result.error ?? "Failed to resolve call");
+					return;
+				}
 			}
 			posthog.capture("waiter_call_resolved", {
 				table_number: selectedTable.table_number,
@@ -464,7 +506,7 @@ export default function WaiterDashboardPage({
 			setSelectedTable(null);
 			setTableOrders([]);
 		} catch (e) {
-			console.error("Failed to resolve call:", e);
+			logger.error("Failed to resolve call:", e);
 			toast.error("Failed to resolve call");
 		} finally {
 			setIsResolving(false);
@@ -473,7 +515,14 @@ export default function WaiterDashboardPage({
 
 	// -- Status helpers --
 	const statusCounts = React.useMemo(() => {
-		const counts = { calling: 0, pending: 0, in_kitchen: 0, food_ready: 0, dining: 0, empty: 0 };
+		const counts = {
+			calling: 0,
+			pending: 0,
+			in_kitchen: 0,
+			food_ready: 0,
+			dining: 0,
+			empty: 0,
+		};
 		tables.forEach((t) => {
 			counts[t.status]++;
 		});
@@ -512,7 +561,7 @@ export default function WaiterDashboardPage({
 			case "pending":
 				return "New Order";
 			case "in_kitchen":
-				return "In Kitchen";
+				return "Preparing";
 			case "food_ready":
 				return "🔔 Food Ready!";
 			case "dining":
@@ -558,63 +607,63 @@ export default function WaiterDashboardPage({
 		count: number;
 		color: string;
 	}[] = [
-			{
-				value: "all",
-				label: "All",
-				count: tables.length,
-				color: "bg-[#0F4C75] text-white",
-			},
-			{
-				value: "calling",
-				label: (
-					<span className="flex items-center gap-1">
-						<CircleAlert size={14} /> Calls
-					</span>
-				),
-				count: statusCounts.calling,
-				color: "bg-red-500 text-white",
-			},
-			{
-				value: "pending",
-				label: (
-					<span className="flex items-center gap-1">
-						<Clock size={14} /> Pending
-					</span>
-				),
-				count: statusCounts.pending,
-				color: "bg-[#3282B8] text-white",
-			},
-			{
-				value: "in_kitchen",
-				label: (
-					<span className="flex items-center gap-1">
-						<UtensilsCrossed size={14} /> In Kitchen
-					</span>
-				),
-				count: statusCounts.in_kitchen,
-				color: "bg-amber-500 text-white",
-			},
-			{
-				value: "food_ready",
-				label: (
-					<span className="flex items-center gap-1">
-						<Bell size={14} /> Ready
-					</span>
-				),
-				count: statusCounts.food_ready,
-				color: "bg-emerald-500 text-white",
-			},
-			{
-				value: "dining",
-				label: (
-					<span className="flex items-center gap-1">
-						<PlayCircle size={14} /> Seated
-					</span>
-				),
-				count: statusCounts.dining,
-				color: "bg-teal-500 text-white",
-			},
-		];
+		{
+			value: "all",
+			label: "All",
+			count: tables.length,
+			color: "bg-[#0F4C75] text-white",
+		},
+		{
+			value: "calling",
+			label: (
+				<span className="flex items-center gap-1">
+					<CircleAlert size={14} /> Calls
+				</span>
+			),
+			count: statusCounts.calling,
+			color: "bg-red-500 text-white",
+		},
+		{
+			value: "pending",
+			label: (
+				<span className="flex items-center gap-1">
+					<Clock size={14} /> Pending
+				</span>
+			),
+			count: statusCounts.pending,
+			color: "bg-[#3282B8] text-white",
+		},
+		{
+			value: "in_kitchen",
+			label: (
+				<span className="flex items-center gap-1">
+					<UtensilsCrossed size={14} /> Preparing
+				</span>
+			),
+			count: statusCounts.in_kitchen,
+			color: "bg-amber-500 text-white",
+		},
+		{
+			value: "food_ready",
+			label: (
+				<span className="flex items-center gap-1">
+					<Bell size={14} /> Ready
+				</span>
+			),
+			count: statusCounts.food_ready,
+			color: "bg-emerald-500 text-white",
+		},
+		{
+			value: "dining",
+			label: (
+				<span className="flex items-center gap-1">
+					<PlayCircle size={14} /> Seated
+				</span>
+			),
+			count: statusCounts.dining,
+			color: "bg-teal-500 text-white",
+		},
+	];
 
 	return (
 		<div className="min-h-screen bg-[#F5F7FA] pb-6">
@@ -678,9 +727,9 @@ export default function WaiterDashboardPage({
 							High Volume Detected
 						</div>
 						<p className="mt-1 text-xs leading-5 text-[#8A5A26]">
-							You&apos;ve processed {monthlyOrdersCount} orders this month on Pro.
-							Enterprise is recommended after {restaurant.max_orders_monthly} orders
-							for busier operations.
+							You&apos;ve processed {monthlyOrdersCount} orders this month on
+							Pro. Enterprise is recommended after{" "}
+							{restaurant.max_orders_monthly} orders for busier operations.
 						</p>
 					</div>
 				)}
@@ -692,17 +741,19 @@ export default function WaiterDashboardPage({
 						<button
 							key={opt.value}
 							onClick={() => setStatusFilter(opt.value)}
-							className={`px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${statusFilter === opt.value
-								? opt.color + " shadow-md"
-								: "bg-white text-[#64748B] border border-[#E2E8F0] hover:border-[#CBD5E1]"
-								}`}
+							className={`px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
+								statusFilter === opt.value
+									? `${opt.color} shadow-md`
+									: "bg-white text-[#64748B] border border-[#E2E8F0] hover:border-[#CBD5E1]"
+							}`}
 						>
 							{opt.label}
 							<span
-								className={`min-w-[20px] h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${statusFilter === opt.value
-									? "bg-white/25 text-white"
-									: "bg-[#F1F5F9] text-[#64748B]"
-									}`}
+								className={`min-w-[20px] h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+									statusFilter === opt.value
+										? "bg-white/25 text-white"
+										: "bg-[#F1F5F9] text-[#64748B]"
+								}`}
 							>
 								{opt.count}
 							</span>
@@ -810,38 +861,44 @@ export default function WaiterDashboardPage({
 										<UtensilsCrossed size={40} />
 									</div>
 									<div className="text-center">
-										<p className="text-lg font-bold text-[#0A1628]">Currently Empty</p>
-										<p className="text-sm text-[#64748B]">No active session for this table</p>
+										<p className="text-lg font-bold text-[#0A1628]">
+											Currently Empty
+										</p>
+										<p className="text-sm text-[#64748B]">
+											No active session for this table
+										</p>
 									</div>
 								</div>
-							) : selectedTable.status === "calling" && (
-								<motion.div
-									initial={{ opacity: 0, y: -8 }}
-									animate={{ opacity: 1, y: 0 }}
-									className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-4"
-								>
-									<div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0 text-red-500">
-										{selectedTable.callType === "bill" ? (
-											<Banknote size={24} />
-										) : (
-											<Hand size={24} />
-										)}
-									</div>
-									<div>
-										<p className="text-xs font-bold text-red-800 uppercase tracking-wide">
-											Guest Requested
-										</p>
-										<p className="text-base font-bold text-red-700 mt-0.5">
-											{selectedTable.callType === "bill"
-												? "Bill / Check"
-												: "Assistance"}
-										</p>
-									</div>
-								</motion.div>
+							) : (
+								selectedTable.status === "calling" && (
+									<motion.div
+										initial={{ opacity: 0, y: -8 }}
+										animate={{ opacity: 1, y: 0 }}
+										className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-4"
+									>
+										<div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0 text-red-500">
+											{selectedTable.callType === "bill" ? (
+												<Banknote size={24} />
+											) : (
+												<Hand size={24} />
+											)}
+										</div>
+										<div>
+											<p className="text-xs font-bold text-red-800 uppercase tracking-wide">
+												Guest Requested
+											</p>
+											<p className="text-base font-bold text-red-700 mt-0.5">
+												{selectedTable.callType === "bill"
+													? "Bill / Check"
+													: "Assistance"}
+											</p>
+										</div>
+									</motion.div>
+								)
 							)}
 
-							{selectedTable.status !== "empty" && (
-								isLoadingOrder ? (
+							{selectedTable.status !== "empty" &&
+								(isLoadingOrder ? (
 									<div className="flex justify-center py-10">
 										<div className="animate-spin w-8 h-8 border-2 border-[#0F4C75] border-t-transparent rounded-full" />
 									</div>
@@ -895,12 +952,14 @@ export default function WaiterDashboardPage({
 												className="text-2xl font-black text-[#0F4C75]"
 												style={{ direction: "ltr" }}
 											>
-												{tableOrders.reduce((s, o) => s + Number(o.total_amount), 0).toFixed(3)} KD
+												{tableOrders
+													.reduce((s, o) => s + Number(o.total_amount), 0)
+													.toFixed(3)}{" "}
+												KD
 											</span>
 										</div>
 									</>
-								)
-							)}
+								))}
 						</div>
 
 						{/* ── Action Footer ── */}
@@ -913,7 +972,9 @@ export default function WaiterDashboardPage({
 							>
 								<button
 									onClick={() => {
-										router.push(`/${slug}/menu?table=${selectedTable.table_number}&waiter_mode=true`);
+										router.push(
+											`/${slug}/menu?table=${selectedTable.table_number}&waiter_mode=true`,
+										);
 									}}
 									className="w-full h-14 bg-[#0F4C75] rounded-2xl text-white font-bold text-lg flex justify-center items-center gap-2 transition-transform active:scale-95 active:bg-[#0A3558]"
 								>
@@ -946,77 +1007,82 @@ export default function WaiterDashboardPage({
 								</button>
 							</div>
 						)}
-						{tableOrders.some((o) => o.status === "pending") && selectedTable.status === "pending" && (
-							<div
-								className="px-6 py-5 bg-white border-t border-[#F1F5F9] flex flex-col gap-3"
-								style={{
-									paddingBottom: "max(20px, env(safe-area-inset-bottom))",
-								}}
-							>
-								<button
-									onClick={handleConfirmOrder}
-									disabled={isConfirming || isClearing}
-									className="w-full h-14 bg-[#0F4C75] rounded-2xl text-white font-bold text-lg flex justify-center items-center gap-2 disabled:opacity-70 transition-transform active:scale-95 active:bg-[#0A3558]"
+						{tableOrders.some((o) => o.status === "pending") &&
+							selectedTable.status === "pending" && (
+								<div
+									className="px-6 py-5 bg-white border-t border-[#F1F5F9] flex flex-col gap-3"
+									style={{
+										paddingBottom: "max(20px, env(safe-area-inset-bottom))",
+									}}
 								>
-									{isConfirming ? (
-										<div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
-									) : (
-										<>
-											<span>Confirm & Send to Kitchen</span>
-											<CheckCircle size={20} />
-										</>
-									)}
-								</button>
-								<button
-									onClick={handleClearTable}
-									disabled={isClearing || isConfirming}
-									className="w-full h-12 bg-red-50 border border-red-200 text-red-600 rounded-2xl font-bold flex justify-center items-center gap-2 disabled:opacity-70 transition-transform active:scale-95"
+									<button
+										onClick={handleConfirmOrder}
+										disabled={isConfirming || isClearing}
+										className="w-full h-14 bg-[#0F4C75] rounded-2xl text-white font-bold text-lg flex justify-center items-center gap-2 disabled:opacity-70 transition-transform active:scale-95 active:bg-[#0A3558]"
+									>
+										{isConfirming ? (
+											<div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+										) : (
+											<>
+												<span>Confirm & Start Preparing</span>
+												<CheckCircle size={20} />
+											</>
+										)}
+									</button>
+									<button
+										onClick={handleClearTable}
+										disabled={isClearing || isConfirming}
+										className="w-full h-12 bg-red-50 border border-red-200 text-red-600 rounded-2xl font-bold flex justify-center items-center gap-2 disabled:opacity-70 transition-transform active:scale-95"
+									>
+										{isClearing ? (
+											<span className="animate-pulse">Clearing...</span>
+										) : (
+											<span>Clear Table (Cancel All)</span>
+										)}
+									</button>
+								</div>
+							)}
+						{tableOrders.some((o) => o.status === "ready") &&
+							selectedTable.status === "food_ready" && (
+								<div
+									className="px-6 py-5 bg-white border-t border-[#F1F5F9] flex flex-col gap-3"
+									style={{
+										paddingBottom: "max(20px, env(safe-area-inset-bottom))",
+									}}
 								>
-									{isClearing ? (
-										<span className="animate-pulse">Clearing...</span>
-									) : (
-										<span>Clear Table (Cancel All)</span>
-									)}
-								</button>
-							</div>
-						)}
-						{tableOrders.some((o) => o.status === "ready") && selectedTable.status === "food_ready" && (
-							<div
-								className="px-6 py-5 bg-white border-t border-[#F1F5F9] flex flex-col gap-3"
-								style={{
-									paddingBottom: "max(20px, env(safe-area-inset-bottom))",
-								}}
-							>
-								<button
-									onClick={handleMarkServed}
-									disabled={isServing}
-									className="w-full h-14 bg-emerald-600 rounded-2xl text-white font-bold text-lg flex justify-center items-center gap-2 transition-transform active:scale-95 hover:bg-emerald-700"
+									<button
+										onClick={handleMarkServed}
+										disabled={isServing}
+										className="w-full h-14 bg-emerald-600 rounded-2xl text-white font-bold text-lg flex justify-center items-center gap-2 transition-transform active:scale-95 hover:bg-emerald-700"
+									>
+										{isServing ? "Updating..." : "Mark as Served (Pickup Food)"}
+										<CheckCircle size={20} />
+									</button>
+								</div>
+							)}
+						{tableOrders.length > 0 &&
+							["in_kitchen", "dining", "food_ready"].includes(
+								selectedTable.status,
+							) && (
+								<div
+									className="px-6 py-5 bg-white border-t border-[#F1F5F9]"
+									style={{
+										paddingBottom: "max(20px, env(safe-area-inset-bottom))",
+									}}
 								>
-									{isServing ? "Updating..." : "Mark as Served (Pickup Food)"}
-									<CheckCircle size={20} />
-								</button>
-							</div>
-						)}
-						{tableOrders.length > 0 && ["in_kitchen", "dining", "food_ready"].includes(selectedTable.status) && (
-							<div
-								className="px-6 py-5 bg-white border-t border-[#F1F5F9]"
-								style={{
-									paddingBottom: "max(20px, env(safe-area-inset-bottom))",
-								}}
-							>
-								<button
-									onClick={handleClearTable}
-									disabled={isClearing}
-									className="w-full h-12 bg-red-50 border border-red-200 text-red-600 rounded-2xl font-bold flex justify-center items-center gap-2 disabled:opacity-70 transition-transform active:scale-95"
-								>
-									{isClearing ? (
-										<span className="animate-pulse">Clearing...</span>
-									) : (
-										<span>Clear Table (Cancel Session)</span>
-									)}
-								</button>
-							</div>
-						)}
+									<button
+										onClick={handleClearTable}
+										disabled={isClearing}
+										className="w-full h-12 bg-red-50 border border-red-200 text-red-600 rounded-2xl font-bold flex justify-center items-center gap-2 disabled:opacity-70 transition-transform active:scale-95"
+									>
+										{isClearing ? (
+											<span className="animate-pulse">Clearing...</span>
+										) : (
+											<span>Clear Table (Cancel Session)</span>
+										)}
+									</button>
+								</div>
+							)}
 					</motion.div>
 				)}
 			</AnimatePresence>

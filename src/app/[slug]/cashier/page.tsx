@@ -2,40 +2,36 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import {
+	Banknote,
+	ChefHat,
+	CircleSlash,
 	Clock,
+	Coffee,
+	CreditCard,
 	LogOut,
 	Minus,
 	Plus,
 	Printer,
+	Search,
 	Trash2,
 	UtensilsCrossed,
-	Search,
-	CreditCard,
-	ArrowRight,
-	ChefHat,
-	Coffee,
-	CircleSlash,
-	Sun,
-	Moon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import posthog from "posthog-js";
+import { useTheme } from "next-themes";
 import * as React from "react";
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { clearStaffSession } from "@/app/actions/staff-auth";
 import { ReceiptPrint } from "@/components/pos/ReceiptPrint";
+import { useRestaurantRealtime } from "@/hooks/useRestaurantRealtime";
+import { useSmartPresence } from "@/hooks/useSmartPresence";
 import {
 	getRestaurantBySlugClient,
 	getTablesByRestaurantClient,
 } from "@/lib/data/orders.client";
-import { createClient } from "@/lib/supabase/client";
-import { useTheme } from "next-themes";
-import type { Restaurant, Table } from "@/types/database";
-import { useSmartPresence } from "@/hooks/useSmartPresence";
-import { useRestaurantRealtime } from "@/hooks/useRestaurantRealtime";
 import { logger } from "@/lib/logger";
-import { clearStaffSession } from "@/app/actions/staff-auth";
-
+import { createClient } from "@/lib/supabase/client";
+import type { PaymentMethod, Restaurant, Table } from "@/types/database";
 
 const supabase = createClient();
 
@@ -54,6 +50,7 @@ interface TableOrder {
 	items: OrderItem[];
 	total: number;
 	createdAt: Date;
+	paymentMethod?: PaymentMethod | null;
 }
 
 const CASHIER_ACTIVE_ORDER_STATUSES = [
@@ -65,7 +62,7 @@ const CASHIER_ACTIVE_ORDER_STATUSES = [
 
 // Generates a short order ID from UUID, e.g. "ORD-4A2F"
 function shortOrderId(uuid: string): string {
-	return "ORD-" + uuid.slice(-4).toUpperCase();
+	return `ORD-${uuid.slice(-4).toUpperCase()}`;
 }
 
 interface CartItem {
@@ -98,7 +95,7 @@ export default function CashierDashboardPage({
 	const { slug } = React.use(params);
 	const { theme, setTheme } = useTheme();
 
-	const [mounted, setMounted] = useState(false);
+	const [_mounted, setMounted] = useState(false);
 	useEffect(() => setMounted(true), []);
 
 	const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
@@ -114,15 +111,18 @@ export default function CashierDashboardPage({
 	useSmartPresence(staffId, restaurant?.id || null);
 
 	// Multi-column POS State
-	const [activeOrderType, setActiveOrderType] = useState<"dine_in" | "takeaway" | "existing">("takeaway");
+	const [activeOrderType, setActiveOrderType] = useState<
+		"dine_in" | "takeaway" | "existing"
+	>("takeaway");
 	const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
 	const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
 	const [cart, setCart] = useState<CartItem[]>([]);
 	const [searchQuery, setSearchQuery] = useState("");
-	
+
 	const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 	const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 	const [isVoiding, setIsVoiding] = useState(false);
+	const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
 	const isSubmittingOrderRef = useRef(false);
 
 	// Menu Data
@@ -132,7 +132,6 @@ export default function CashierDashboardPage({
 
 	// Print State
 
-
 	// ───────────────── Data fetching ─────────────────
 	const fetchActiveOrders = React.useCallback(async (restaurantId: string) => {
 		const { data, error } = await supabase
@@ -140,6 +139,7 @@ export default function CashierDashboardPage({
 			.select(`
           id,
           status,
+          payment_method,
           total_amount,
           created_at,
           table:tables(id, table_number),
@@ -164,6 +164,7 @@ export default function CashierDashboardPage({
 			id: row.id,
 			tableNumber: row.table?.table_number ?? null,
 			status: row.status,
+			paymentMethod: row.payment_method ?? null,
 			total: row.total_amount,
 			createdAt: new Date(row.created_at),
 			items: (row.items || []).map((oi: any) => ({
@@ -181,7 +182,9 @@ export default function CashierDashboardPage({
 	const fetchMenuData = React.useCallback(async (restaurantId: string) => {
 		const { data, error } = await supabase
 			.from("categories")
-			.select("id, name_en, menu_items(id, name_en, price, category_id, is_available, image_url)")
+			.select(
+				"id, name_en, menu_items(id, name_en, price, category_id, is_available, image_url)",
+			)
 			.eq("restaurant_id", restaurantId)
 			.order("sort_order");
 
@@ -203,7 +206,7 @@ export default function CashierDashboardPage({
 			if (!restaurant?.id) return;
 			const ords = await fetchActiveOrders(restaurant.id);
 			setOrders(ords);
-		}
+		},
 	});
 
 	// Initial load
@@ -218,11 +221,13 @@ export default function CashierDashboardPage({
 					return;
 				}
 
-				const staffId = localStorage.getItem(`tawla_staff_${restaurantData.id}_cashier`);
+				const staffId = localStorage.getItem(
+					`tawla_staff_${restaurantData.id}_cashier`,
+				);
 				if (!staffId) {
 					router.push(`/${slug}/login`);
 					return;
-				} 
+				}
 
 				if (cancelled) return;
 				setRestaurant(restaurantData);
@@ -244,9 +249,10 @@ export default function CashierDashboardPage({
 		}
 
 		loadData();
-		return () => { cancelled = true; };
+		return () => {
+			cancelled = true;
+		};
 	}, [slug, router, fetchActiveOrders, fetchMenuData]);
-
 
 	// ───────────────── Handlers ─────────────────
 
@@ -257,13 +263,15 @@ export default function CashierDashboardPage({
 			const orderToPay = orders.find((o) => o.id === activeOrderId);
 			const { error } = await supabase
 				.from("orders")
-				.update({ status: "paid" })
+				.update({ status: "completed", payment_method: paymentMethod })
 				.eq("id", activeOrderId)
 				.eq("restaurant_id", restaurant.id);
 			if (error) throw error;
 
 			if (orderToPay?.tableNumber) {
-				const targetTable = tables.find((t) => t.table_number === orderToPay.tableNumber);
+				const targetTable = tables.find(
+					(t) => t.table_number === orderToPay.tableNumber,
+				);
 				if (targetTable) {
 					await supabase
 						.from("waiter_calls")
@@ -274,14 +282,15 @@ export default function CashierDashboardPage({
 				}
 			}
 
-			toast.success("Payment successful! Order closed.");
+			toast.success(`Payment recorded as ${paymentMethod}. Ticket completed.`);
 			setActiveOrderId(null);
 			setCart([]);
 			setActiveOrderType("takeaway");
-			
-			
+			setSelectedTableId(null);
+			setPaymentMethod("cash");
+
 			// Trigger browser print for the current ticket before navigating away
-			if(orderToPay) {
+			if (orderToPay) {
 				window.print();
 			}
 		} catch (error) {
@@ -299,7 +308,9 @@ export default function CashierDashboardPage({
 			return;
 		}
 
-		const confirmed = window.confirm("Void this active order? This cannot be undone.");
+		const confirmed = window.confirm(
+			"Void this active order? This cannot be undone.",
+		);
 		if (!confirmed) return;
 
 		setIsVoiding(true);
@@ -323,10 +334,9 @@ export default function CashierDashboardPage({
 		}
 	};
 
-
-
 	const handleSendToKitchen = async () => {
-		if (!restaurant?.id || cart.length === 0 || isSubmittingOrderRef.current) return;
+		if (!restaurant?.id || cart.length === 0 || isSubmittingOrderRef.current)
+			return;
 
 		if (activeOrderType === "dine_in" && !selectedTableId) {
 			toast.error("Please select a table from the grid first.");
@@ -357,7 +367,9 @@ export default function CashierDashboardPage({
 				price_at_time: c.price,
 			}));
 
-			const { error: itemsError } = await supabase.from("order_items").insert(orderItems);
+			const { error: itemsError } = await supabase
+				.from("order_items")
+				.insert(orderItems);
 			if (itemsError) throw itemsError;
 
 			toast.success(`Order sent to kitchen successfully!`);
@@ -379,7 +391,9 @@ export default function CashierDashboardPage({
 
 	const addToCart = (item: MenuItemRow) => {
 		if (activeOrderType === "existing") {
-			toast.error("Cannot modify an existing sent order directly. Create a new ticket.");
+			toast.error(
+				"Cannot modify an existing sent order directly. Create a new ticket.",
+			);
 			return;
 		}
 		setCart((prev) => {
@@ -389,7 +403,15 @@ export default function CashierDashboardPage({
 					c.menuItemId === item.id ? { ...c, quantity: c.quantity + 1 } : c,
 				);
 			}
-			return [...prev, { menuItemId: item.id, name: item.name_en, price: item.price, quantity: 1 }];
+			return [
+				...prev,
+				{
+					menuItemId: item.id,
+					name: item.name_en,
+					price: item.price,
+					quantity: 1,
+				},
+			];
 		});
 	};
 
@@ -421,11 +443,32 @@ export default function CashierDashboardPage({
 		return items;
 	}, [menuItems, selectedCategory, searchQuery]);
 
-	const existingActiveOrder = activeOrderId ? orders.find(o => o.id === activeOrderId) : null;
-	const displayTotal = activeOrderType === "existing" && existingActiveOrder ? existingActiveOrder.total : cartTotal;
-	const displayItems = activeOrderType === "existing" && existingActiveOrder 
-		? existingActiveOrder.items.map(i => ({ name: i.name, quantity: i.quantity, price: i.price, id: i.id }))
-		: cart.map(i => ({ name: i.name, quantity: i.quantity, price: i.price, id: i.menuItemId }));
+	const existingActiveOrder = activeOrderId
+		? orders.find((o) => o.id === activeOrderId)
+		: null;
+	const displayTotal =
+		activeOrderType === "existing" && existingActiveOrder
+			? existingActiveOrder.total
+			: cartTotal;
+	const displayItems =
+		activeOrderType === "existing" && existingActiveOrder
+			? existingActiveOrder.items.map((i) => ({
+					name: i.name,
+					quantity: i.quantity,
+					price: i.price,
+					id: i.id,
+				}))
+			: cart.map((i) => ({
+					name: i.name,
+					quantity: i.quantity,
+					price: i.price,
+					id: i.menuItemId,
+				}));
+	const selectedTableNumber = selectedTableId
+		? (tables.find((table) => table.id === selectedTableId)?.table_number ??
+			null)
+		: null;
+	const itemCount = displayItems.reduce((acc, item) => acc + item.quantity, 0);
 
 	// ───────────────── Render ─────────────────
 
@@ -441,425 +484,638 @@ export default function CashierDashboardPage({
 		<>
 			{/* Main App Wrap - Hidden during printing */}
 			<div className="min-h-screen flex flex-col bg-[#F5F7FA] text-[#0A1628] font-sans print:hidden overflow-hidden w-full h-screen selection:bg-[#3282B8]/20">
-				
 				{/* ── Top App Bar ── */}
-			<header className="h-[72px] bg-white border-b border-[#E8ECF1] flex items-center justify-between px-6 shrink-0 z-20 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
-				<div className="flex items-center gap-4">
-					<div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0F4C75] to-[#3282B8] flex items-center justify-center shadow-md">
-						<span className="text-white text-lg font-bold leading-none">T</span>
-					</div>
-					<div>
-						<h1 className="text-lg font-bold text-[#0A1628] leading-none mb-1">{restaurant?.name || "Tawla"}</h1>
-						<span className="text-[11px] text-[#7B8BA3] font-bold uppercase tracking-widest">POS Station</span>
-					</div>
-				</div>
-				<div className="flex items-center gap-5">
-					<div className="hidden md:flex items-center gap-2 px-4 py-2 bg-[#E6F7ED] rounded-full border border-[#C3ECD3]">
-						<span className="w-2.5 h-2.5 rounded-full bg-[#10B981] shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-						<span className="text-[11px] text-[#047857] font-bold uppercase tracking-widest">Online</span>
-					</div>
-					<button
-						onClick={async () => {
-							await clearStaffSession();
-							localStorage.removeItem(`tawla_staff_${restaurant?.id}_cashier`);
-							router.push(`/${slug}/login`);
-						}}
-						className="flex items-center gap-2 px-4 py-2 rounded-xl text-[#D9381E] hover:bg-[#FFF4F2] transition-colors font-bold text-sm"
-					>
-						<LogOut size={16} strokeWidth={2.5}/> Exit Session
-					</button>
-				</div>
-			</header>
-
-			{/* ── Main Workspace (3 columns) ── */}
-			<div className="flex-1 flex overflow-hidden">
-				
-				{/* ── COL 1: Operations & Tables (~25%) ── */}
-				<aside className="w-full max-w-[340px] xl:max-w-[380px] bg-white border-r border-[#E8ECF1] flex flex-col shrink-0 z-10 transition-all">
-					<div className="p-5 grid grid-cols-2 gap-3 border-b border-[#E8ECF1] bg-[#FAFBFC]">
-						<button
-							onClick={() => {
-								setActiveOrderType("dine_in");
-								setActiveOrderId(null);
-								setCart([]);
-								setSelectedTableId(null);
-							}}
-							className={`col-span-1 flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border transition-all outline-none ${
-								activeOrderType === "dine_in" 
-									? "bg-[#0F4C75] text-white border-[#0F4C75] shadow-lg shadow-[#0F4C75]/20" 
-									: "bg-white text-[#5A6B82] border-[#E8ECF1] hover:border-[#BBE1FA]"
-							}`}
-						>
-							<UtensilsCrossed size={24} strokeWidth={activeOrderType === "dine_in" ? 2.5 : 2} />
-							<span className="text-sm font-bold mt-1">Dine-In</span>
-						</button>
-						<button
-							onClick={() => {
-								setActiveOrderType("takeaway");
-								setActiveOrderId(null);
-								setCart([]);
-								setSelectedTableId(null);
-							}}
-							className={`col-span-1 flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border transition-all outline-none ${
-								activeOrderType === "takeaway" 
-									? "bg-[#0F4C75] text-white border-[#0F4C75] shadow-lg shadow-[#0F4C75]/20" 
-									: "bg-white text-[#5A6B82] border-[#E8ECF1] hover:border-[#BBE1FA]"
-							}`}
-						>
-							<Coffee size={24} strokeWidth={activeOrderType === "takeaway" ? 2.5 : 2} />
-							<span className="text-sm font-bold mt-1">Takeaway</span>
-						</button>
-					</div>
-
-					<div className="px-5 py-4 bg-white flex items-center justify-between border-b border-[#E8ECF1]">
-						<h3 className="text-xs font-bold text-[#7B8BA3] uppercase tracking-widest flex items-center gap-1.5">
-							<Clock size={14} /> Active Tickets
-						</h3>
-						<span className="bg-[#E8ECF1] text-[#0A1628] px-2.5 py-0.5 rounded-full text-xs font-bold">
-							{orders.length}
-						</span>
-					</div>
-
-					<div className="flex-1 overflow-y-auto p-5 bg-[#FAFBFC] space-y-6">
-						{/* Takeaway Pending Tickets */}
-						{orders.filter(o => !o.tableNumber).length > 0 && (
-							<div>
-								<h4 className="text-[11px] font-bold text-[#7B8BA3] uppercase tracking-widest mb-3 pl-1">Takeaway Queue</h4>
-								<div className="space-y-3">
-									{orders.filter(o => !o.tableNumber).map(o => (
-										<button
-											key={o.id}
-											onClick={() => {
-												setActiveOrderType("existing");
-												setActiveOrderId(o.id);
-												setSelectedTableId(null);
-											}}
-											className={`w-full text-left p-4 rounded-2xl border transition-all outline-none ${
-												activeOrderId === o.id
-													? "bg-[#E6F4FE] border-[#3282B8] shadow-sm"
-													: "bg-white border-[#E8ECF1] hover:border-[#BBE1FA]"
-											}`}
-										>
-											<div className="flex justify-between items-center mb-2">
-												<span className="text-sm font-bold text-[#0A1628]">{shortOrderId(o.id)}</span>
-												<span className="text-xs font-bold text-[#7B8BA3]">{o.createdAt.toLocaleTimeString([], { hour: '2-digit', minute:'2-digit' })}</span>
-											</div>
-											<div className="flex justify-between items-baseline">
-												<span className="text-base font-bold text-[#3282B8]">{o.total.toFixed(3)} KD</span>
-												<span className="text-xs font-semibold text-[#5A6B82]">{o.items.length} items</span>
-											</div>
-										</button>
-									))}
-								</div>
-							</div>
-						)}
-
-						{/* Dine in Tables Grid */}
+				<header className="h-[72px] bg-white border-b border-[#E8ECF1] flex items-center justify-between px-6 shrink-0 z-20 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+					<div className="flex items-center gap-4">
+						<div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0F4C75] to-[#3282B8] flex items-center justify-center shadow-md">
+							<span className="text-white text-lg font-bold leading-none">
+								T
+							</span>
+						</div>
 						<div>
-							<h4 className="text-[11px] font-bold text-[#7B8BA3] uppercase tracking-widest mb-3 pl-1">Dine-In Floor Map</h4>
-							<div className="grid grid-cols-3 gap-3">
-								{tables.map(t => {
-									const activeOrder = orders.find(o => o.tableNumber === t.table_number);
-									const isOccupied = !!activeOrder;
-									const isSelected = selectedTableId === t.id || (activeOrder && activeOrderId === activeOrder.id);
-
-									return (
-										<button
-											key={t.id}
-											onClick={() => {
-												if (isOccupied) {
-													setActiveOrderType("existing");
-													setActiveOrderId(activeOrder.id);
-													setSelectedTableId(t.id);
-												} else {
-													setActiveOrderType("dine_in");
-													setActiveOrderId(null);
-													setCart([]);
-													setSelectedTableId(t.id);
-												}
-											}}
-											className={`aspect-square rounded-2xl flex flex-col items-center justify-center p-2 relative transition-all outline-none ${
-												isOccupied 
-													? (isSelected ? "bg-[#FFF4F2] border-2 border-[#D9381E] shadow-sm" : "bg-[#FFF4F2] border border-[#FFE2DD] text-[#D9381E] hover:border-[#D9381E]/40")
-													: (isSelected ? "bg-[#E6F4FE] border-2 border-[#3282B8] shadow-sm text-[#0A1628]" : "bg-white border border-[#E8ECF1] text-[#0A1628] hover:border-[#BBE1FA]")
-											}`}
-										>
-											<span className={`text-2xl font-bold ${isOccupied ? "text-[#D9381E]" : "text-[#0A1628]"}`}>{t.table_number}</span>
-											<span className={`text-[10px] font-bold uppercase tracking-widest mt-1.5 ${isOccupied ? "text-[#D9381E]/70" : "text-[#7B8BA3]"}`}>
-												{isOccupied ? "Busy" : "Free"}
-											</span>
-										</button>
-									)
-								})}
-							</div>
+							<h1 className="text-lg font-bold text-[#0A1628] leading-none mb-1">
+								{restaurant?.name || "Tawla"}
+							</h1>
+							<span className="text-[11px] text-[#7B8BA3] font-bold uppercase tracking-widest">
+								POS Station
+							</span>
 						</div>
 					</div>
-				</aside>
-
-				{/* ── COL 2: Menu / Build Order (~45%) ── */}
-				<main className="flex-1 flex flex-col h-full bg-[#FAFBFC] min-w-[320px]">
-					<div className="p-5 bg-white border-b border-[#E8ECF1] shadow-[0_2px_10px_rgba(0,0,0,0.01)] z-10 space-y-4">
-						<div className="relative w-full">
-							<Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#7B8BA3]" size={18} />
-							<input
-								type="text"
-								placeholder="Search menu items..."
-								value={searchQuery}
-								onChange={e => setSearchQuery(e.target.value)}
-								className="w-full pl-11 pr-5 py-3.5 rounded-2xl bg-[#F5F7FA] border border-transparent text-[15px] font-medium text-[#0A1628] placeholder:text-[#A0ABB8] focus:bg-white focus:border-[#E8ECF1] focus:ring-4 focus:ring-[#3282B8]/10 transition-all outline-none"
-							/>
+					<div className="flex items-center gap-5">
+						<div className="hidden md:flex items-center gap-2 px-4 py-2 bg-[#E6F7ED] rounded-full border border-[#C3ECD3]">
+							<span className="w-2.5 h-2.5 rounded-full bg-[#10B981] shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+							<span className="text-[11px] text-[#047857] font-bold uppercase tracking-widest">
+								Online
+							</span>
 						</div>
-						<div className="flex gap-2.5 overflow-x-auto pb-1 hide-scrollbar">
+						<button
+							onClick={async () => {
+								await clearStaffSession();
+								localStorage.removeItem(
+									`tawla_staff_${restaurant?.id}_cashier`,
+								);
+								router.push(`/${slug}/login`);
+							}}
+							className="flex items-center gap-2 px-4 py-2 rounded-xl text-[#D9381E] hover:bg-[#FFF4F2] transition-colors font-bold text-sm"
+						>
+							<LogOut size={16} strokeWidth={2.5} /> Exit Session
+						</button>
+					</div>
+				</header>
+
+				{/* ── Main Workspace (3 columns) ── */}
+				<div className="flex-1 flex overflow-hidden">
+					{/* ── COL 1: Operations & Tables (~25%) ── */}
+					<aside className="w-full max-w-[340px] xl:max-w-[380px] bg-white border-r border-[#E8ECF1] flex flex-col shrink-0 z-10 transition-all">
+						<div className="p-5 grid grid-cols-2 gap-3 border-b border-[#E8ECF1] bg-[#FAFBFC]">
 							<button
-								onClick={() => setSelectedCategory("all")}
-								className={`px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors border outline-none ${
-									selectedCategory === "all"
-										? "bg-[#0A1628] text-white border-transparent shadow-md"
-										: "bg-white text-[#5A6B82] border-[#E8ECF1] hover:bg-[#F5F7FA]"
+								onClick={() => {
+									setActiveOrderType("dine_in");
+									setActiveOrderId(null);
+									setCart([]);
+									setSelectedTableId(null);
+									setPaymentMethod("cash");
+								}}
+								className={`col-span-1 flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border transition-all outline-none ${
+									activeOrderType === "dine_in"
+										? "bg-[#0F4C75] text-white border-[#0F4C75] shadow-lg shadow-[#0F4C75]/20"
+										: "bg-white text-[#5A6B82] border-[#E8ECF1] hover:border-[#BBE1FA]"
 								}`}
 							>
-								All Items
+								<UtensilsCrossed
+									size={24}
+									strokeWidth={activeOrderType === "dine_in" ? 2.5 : 2}
+								/>
+								<span className="text-sm font-bold mt-1">Dine-In</span>
 							</button>
-							{menuCategories.map((c) => (
+							<button
+								onClick={() => {
+									setActiveOrderType("takeaway");
+									setActiveOrderId(null);
+									setCart([]);
+									setSelectedTableId(null);
+									setPaymentMethod("cash");
+								}}
+								className={`col-span-1 flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border transition-all outline-none ${
+									activeOrderType === "takeaway"
+										? "bg-[#0F4C75] text-white border-[#0F4C75] shadow-lg shadow-[#0F4C75]/20"
+										: "bg-white text-[#5A6B82] border-[#E8ECF1] hover:border-[#BBE1FA]"
+								}`}
+							>
+								<Coffee
+									size={24}
+									strokeWidth={activeOrderType === "takeaway" ? 2.5 : 2}
+								/>
+								<span className="text-sm font-bold mt-1">Takeaway</span>
+							</button>
+						</div>
+
+						<div className="px-5 py-4 bg-white flex items-center justify-between border-b border-[#E8ECF1]">
+							<h3 className="text-xs font-bold text-[#7B8BA3] uppercase tracking-widest flex items-center gap-1.5">
+								<Clock size={14} /> Active Tickets
+							</h3>
+							<span className="bg-[#E8ECF1] text-[#0A1628] px-2.5 py-0.5 rounded-full text-xs font-bold">
+								{orders.length}
+							</span>
+						</div>
+
+						<div className="flex-1 overflow-y-auto p-5 bg-[#FAFBFC] space-y-6">
+							{/* Takeaway Pending Tickets */}
+							{orders.filter((o) => !o.tableNumber).length > 0 && (
+								<div>
+									<h4 className="text-[11px] font-bold text-[#7B8BA3] uppercase tracking-widest mb-3 pl-1">
+										Takeaway Queue
+									</h4>
+									<div className="space-y-3">
+										{orders
+											.filter((o) => !o.tableNumber)
+											.map((o) => (
+												<button
+													key={o.id}
+													onClick={() => {
+														setActiveOrderType("existing");
+														setActiveOrderId(o.id);
+														setSelectedTableId(null);
+														setPaymentMethod("cash");
+													}}
+													className={`w-full text-left p-4 rounded-2xl border transition-all outline-none ${
+														activeOrderId === o.id
+															? "bg-[#E6F4FE] border-[#3282B8] shadow-sm"
+															: "bg-white border-[#E8ECF1] hover:border-[#BBE1FA]"
+													}`}
+												>
+													<div className="flex justify-between items-center mb-2">
+														<span className="text-sm font-bold text-[#0A1628]">
+															{shortOrderId(o.id)}
+														</span>
+														<span className="text-xs font-bold text-[#7B8BA3]">
+															{o.createdAt.toLocaleTimeString([], {
+																hour: "2-digit",
+																minute: "2-digit",
+															})}
+														</span>
+													</div>
+													<div className="flex justify-between items-baseline">
+														<span className="text-base font-bold text-[#3282B8]">
+															{o.total.toFixed(3)} KD
+														</span>
+														<span className="text-xs font-semibold text-[#5A6B82]">
+															{o.items.length} items
+														</span>
+													</div>
+												</button>
+											))}
+									</div>
+								</div>
+							)}
+
+							{/* Dine in Tables Grid */}
+							<div>
+								<div className="mb-3 flex items-center justify-between gap-3 pl-1">
+									<h4 className="text-[11px] font-bold uppercase tracking-widest text-[#7B8BA3]">
+										Dine-In Floor Map
+									</h4>
+									<div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B8BA3]">
+										<div className="flex items-center gap-1.5">
+											<span className="h-2.5 w-2.5 rounded-full bg-[#10B981]" />
+											Free
+										</div>
+										<div className="flex items-center gap-1.5">
+											<span className="h-2.5 w-2.5 rounded-full bg-[#D9381E]" />
+											Occupied
+										</div>
+									</div>
+								</div>
+								<div className="grid grid-cols-3 gap-3">
+									{tables.map((t) => {
+										const activeOrder = orders.find(
+											(o) => o.tableNumber === t.table_number,
+										);
+										const isOccupied = !!activeOrder;
+										const isSelected =
+											selectedTableId === t.id ||
+											(activeOrder && activeOrderId === activeOrder.id);
+
+										return (
+											<button
+												key={t.id}
+												onClick={() => {
+													if (isOccupied) {
+														setActiveOrderType("existing");
+														setActiveOrderId(activeOrder.id);
+														setSelectedTableId(t.id);
+														setPaymentMethod("cash");
+													} else {
+														setActiveOrderType("dine_in");
+														setActiveOrderId(null);
+														setCart([]);
+														setSelectedTableId(t.id);
+														setPaymentMethod("cash");
+													}
+												}}
+												className={`aspect-square rounded-2xl flex flex-col items-center justify-center p-2 relative transition-all outline-none ${
+													isOccupied
+														? isSelected
+															? "border-2 border-[#D9381E] bg-[#FFF4F2] shadow-sm"
+															: "border border-[#F8CFC8] bg-[#FFF4F2] text-[#D9381E] hover:border-[#D9381E]/40"
+														: isSelected
+															? "border-2 border-[#10B981] bg-[#EAF9F1] shadow-sm text-[#0A1628]"
+															: "border border-[#CDEFD9] bg-[#F1FBF5] text-[#0A1628] hover:border-[#10B981]/40"
+												}`}
+											>
+												<span
+													className={`text-2xl font-bold ${isOccupied ? "text-[#D9381E]" : "text-[#047857]"}`}
+												>
+													{t.table_number}
+												</span>
+												<span
+													className={`mt-1.5 text-[10px] font-bold uppercase tracking-widest ${isOccupied ? "text-[#D9381E]/70" : "text-[#047857]/70"}`}
+												>
+													{isOccupied ? "Unpaid" : "Free"}
+												</span>
+											</button>
+										);
+									})}
+								</div>
+							</div>
+						</div>
+					</aside>
+
+					{/* ── COL 2: Menu / Build Order (~45%) ── */}
+					<main className="flex-1 flex flex-col h-full bg-[#FAFBFC] min-w-[320px]">
+						<div className="p-5 bg-white border-b border-[#E8ECF1] shadow-[0_2px_10px_rgba(0,0,0,0.01)] z-10 space-y-4">
+							<div className="relative w-full">
+								<Search
+									className="absolute left-4 top-1/2 -translate-y-1/2 text-[#7B8BA3]"
+									size={18}
+								/>
+								<input
+									type="text"
+									placeholder="Search menu items..."
+									value={searchQuery}
+									onChange={(e) => setSearchQuery(e.target.value)}
+									className="w-full pl-11 pr-5 py-3.5 rounded-2xl bg-[#F5F7FA] border border-transparent text-[15px] font-medium text-[#0A1628] placeholder:text-[#A0ABB8] focus:bg-white focus:border-[#E8ECF1] focus:ring-4 focus:ring-[#3282B8]/10 transition-all outline-none"
+								/>
+							</div>
+							<div className="flex gap-2.5 overflow-x-auto pb-1 hide-scrollbar">
 								<button
-									key={c.id}
-									onClick={() => setSelectedCategory(c.id)}
+									onClick={() => setSelectedCategory("all")}
 									className={`px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors border outline-none ${
-										selectedCategory === c.id
+										selectedCategory === "all"
 											? "bg-[#0A1628] text-white border-transparent shadow-md"
 											: "bg-white text-[#5A6B82] border-[#E8ECF1] hover:bg-[#F5F7FA]"
 									}`}
 								>
-									{c.name_en}
+									All Items
 								</button>
-							))}
-						</div>
-					</div>
-
-					<div className="flex-1 overflow-y-auto p-5">
-						{activeOrderType === "existing" && (
-							<div className="mb-5 p-4 rounded-2xl bg-[#E6F4FE] border border-[#BBE1FA] text-[#0F4C75] text-sm font-semibold flex items-center gap-3 shadow-sm">
-								<CircleSlash size={20} className="shrink-0" /> 
-								<p>Viewing an existing order. To modify a sent order, void it or create a new supplemental ticket.</p>
-							</div>
-						)}
-						<div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-4 gap-4">
-							{filteredMenuItems.map((item) => {
-								const inCart = cart.find((c) => c.menuItemId === item.id);
-								const isDisabled = activeOrderType === "existing";
-								
-								return (
-									<motion.button
-										key={item.id}
-										whileTap={!isDisabled ? { scale: 0.96 } : {}}
-										onClick={() => addToCart(item)}
-										disabled={isDisabled}
-										className={`group relative text-left rounded-2xl border transition-all h-[140px] flex flex-col justify-between p-4 overflow-hidden outline-none ${
-											inCart
-												? "border-[#3282B8] bg-[#E6F4FE] shadow-md"
-												: "border-[#E8ECF1] bg-white shadow-sm hover:shadow-md hover:border-[#BBE1FA]"
-										} ${isDisabled ? "opacity-60 cursor-not-allowed grayscale-[20%]" : ""}`}
+								{menuCategories.map((c) => (
+									<button
+										key={c.id}
+										onClick={() => setSelectedCategory(c.id)}
+										className={`px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors border outline-none ${
+											selectedCategory === c.id
+												? "bg-[#0A1628] text-white border-transparent shadow-md"
+												: "bg-white text-[#5A6B82] border-[#E8ECF1] hover:bg-[#F5F7FA]"
+										}`}
 									>
-										{/* Decorator strip */}
-										{inCart && <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-[#3282B8]" />}
-										
-										<div className="pr-2 z-10 truncate whitespace-normal">
-											<p className="text-[15px] font-bold text-[#0A1628] leading-tight line-clamp-3">
-												{item.name_en}
-											</p>
-										</div>
-										<div className="flex justify-between items-end z-10 w-full mt-2">
-											<p className="text-[15px] font-bold text-[#3282B8]">
-												{item.price.toFixed(3)} KD
-											</p>
-										</div>
-										{inCart && (
-											<div className="absolute top-0 right-0 bg-[#3282B8] text-white text-[13px] font-bold min-w-[32px] h-8 px-2 flex items-center justify-center rounded-bl-xl shadow-sm z-20">
-												x{inCart.quantity}
-											</div>
-										)}
-									</motion.button>
-								);
-							})}
+										{c.name_en}
+									</button>
+								))}
+							</div>
 						</div>
-					</div>
-				</main>
 
-				{/* ── COL 3: Current Ticket (~30%) ── */}
-				<aside className="w-full max-w-[380px] xl:max-w-[420px] bg-white border-l border-[#E8ECF1] flex flex-col shrink-0 shadow-[-8px_0_30px_rgba(0,0,0,0.03)] z-20">
-					{/* Ticket Header */}
-					<div className="p-6 border-b border-[#E8ECF1] flex flex-col gap-1.5 bg-white">
-						<div className="flex items-center justify-between">
-							<h2 className="text-2xl font-bold text-[#0A1628] leading-none">
-								{activeOrderType === "dine_in" ? (
-									selectedTableId ? `Table ${tables.find(t=>t.id===selectedTableId)?.table_number}` : "Select Table"
-								) : activeOrderType === "takeaway" ? (
-									"Takeaway"
-								) : (
-									existingActiveOrder?.tableNumber ? `Table ${existingActiveOrder.tableNumber}` : "Takeaway"
-								)}
-							</h2>
+						<div className="flex-1 overflow-y-auto p-5">
 							{activeOrderType === "existing" && (
-								<span className="text-[11px] font-bold bg-[#F5F7FA] border border-[#E8ECF1] text-[#5A6B82] px-2.5 py-1.5 rounded-lg uppercase tracking-widest shadow-sm">
-									{shortOrderId(activeOrderId!)}
-								</span>
-							)}
-						</div>
-						<p className="text-[12px] font-semibold text-[#7B8BA3] uppercase tracking-widest mt-1">
-							{activeOrderType === "existing" ? "Current Active Order" : "New Ticket"}
-						</p>
-					</div>
-
-					{/* Ticket Items */}
-					<div className="flex-1 overflow-y-auto p-5 bg-white">
-						{displayItems.length === 0 ? (
-							<div className="h-full flex flex-col items-center justify-center text-[#7B8BA3] opacity-80">
-								<div className="w-20 h-20 rounded-full bg-[#F5F7FA] border border-[#E8ECF1] flex items-center justify-center mb-5 shadow-sm">
-									<UtensilsCrossed size={32} className="text-[#A0ABB8]" />
-								</div>
-								<p className="text-base font-bold text-[#0A1628]">Ticket is Empty</p>
-								<p className="text-[13px] mt-2 text-center text-[#7B8BA3] max-w-[200px] leading-relaxed">Add items from the menu to build an order.</p>
-							</div>
-						) : (
-							<div className="space-y-4">
-								<AnimatePresence>
-									{displayItems.map((item) => (
-										<motion.div
-											layout
-											initial={{ opacity: 0, scale: 0.95 }}
-											animate={{ opacity: 1, scale: 1 }}
-											exit={{ opacity: 0, scale: 0.95 }}
-											key={item.id}
-											className="bg-[#F5F7FA] border border-[#E8ECF1] rounded-2xl p-4 flex flex-col gap-3 group shadow-sm"
-										>
-											<div className="flex justify-between items-start gap-4">
-												<p className="text-[15px] font-bold text-[#0A1628] leading-tight flex-1">
-													{item.name}
-												</p>
-												<p className="text-[15px] font-bold text-[#0F4C75] tabular-nums whitespace-nowrap">
-													{(item.price * item.quantity).toFixed(3)} KD
-												</p>
-											</div>
-											
-											{activeOrderType !== "existing" && (
-												<div className="flex items-center self-start bg-white rounded-xl p-1 shadow-sm border border-[#E8ECF1]">
-													<button
-														onClick={() => removeFromCart(item.id)}
-														className="w-10 h-10 rounded-lg flex items-center justify-center text-[#5A6B82] hover:bg-[#FFF4F2] hover:text-[#D9381E] transition-colors outline-none"
-													>
-														{item.quantity > 1 ? <Minus size={18} strokeWidth={2.5} /> : <Trash2 size={18} strokeWidth={2.5} />}
-													</button>
-													<span className="text-[15px] font-bold text-[#0A1628] w-10 text-center tabular-nums">
-														{item.quantity}
-													</span>
-													<button
-														onClick={() => {
-															const rawItem = menuItems.find(m => m.id === item.id);
-															if (rawItem) addToCart(rawItem);
-														}}
-														className="w-10 h-10 rounded-lg flex items-center justify-center text-[#5A6B82] hover:bg-[#E6F4FE] hover:text-[#0F4C75] transition-colors outline-none"
-													>
-														<Plus size={18} strokeWidth={2.5} />
-													</button>
-												</div>
-											)}
-											{activeOrderType === "existing" && (
-												<div className="text-[11px] font-bold text-[#5A6B82] uppercase tracking-wider bg-white px-3 py-1.5 rounded-lg border border-[#E8ECF1] self-start shadow-sm flex items-center gap-1.5">
-													Qty: <span className="text-[#0A1628] text-sm tabular-nums">{item.quantity}</span>
-												</div>
-											)}
-										</motion.div>
-									))}
-								</AnimatePresence>
-							</div>
-						)}
-					</div>
-
-					{/* Totals & Actions */}
-					{displayItems.length > 0 && (
-						<div className="flex flex-col border-t border-[#E8ECF1] bg-white z-20 shadow-[0_-10px_40px_rgba(0,0,0,0.03)]">
-							{/* Totals Block */}
-							<div className="p-6 flex justify-between items-end border-b border-[#E8ECF1]">
-								<div>
-									<p className="text-xs font-bold text-[#7B8BA3] uppercase tracking-widest mb-1.5">Grand Total</p>
-									<p className="text-[13px] font-semibold text-[#5A6B82]">{displayItems.reduce((acc, i) => acc + i.quantity, 0)} items</p>
-								</div>
-								<div className="text-right">
-									<p className="text-[32px] font-bold text-[#0A1628] tabular-nums leading-none tracking-tight">
-										{displayTotal.toFixed(3)}
-										<span className="text-sm ml-1.5 font-bold text-[#7B8BA3]">KD</span>
+								<div className="mb-5 p-4 rounded-2xl bg-[#E6F4FE] border border-[#BBE1FA] text-[#0F4C75] text-sm font-semibold flex items-center gap-3 shadow-sm">
+									<CircleSlash size={20} className="shrink-0" />
+									<p>
+										Viewing an existing order. To modify a sent order, void it
+										or create a new supplemental ticket.
 									</p>
 								</div>
-							</div>
+							)}
+							<div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-4 gap-4">
+								{filteredMenuItems.map((item) => {
+									const inCart = cart.find((c) => c.menuItemId === item.id);
+									const isDisabled = activeOrderType === "existing";
 
-							{/* Action Buttons Grid */}
-							<div className="p-6 grid gap-3 grid-cols-2 bg-[#FAFBFC]">
-								{activeOrderType !== "existing" ? (
-									<>
-										<button
-											onClick={handleVoidOrder}
-											className="col-span-1 flex items-center justify-center gap-2 py-4 rounded-xl bg-white border border-[#E8ECF1] shadow-sm text-[#D9381E] text-[15px] font-bold hover:bg-[#FFF4F2] hover:border-[#FFE2DD] active:scale-[0.98] transition-all outline-none"
+									return (
+										<motion.button
+											key={item.id}
+											whileTap={!isDisabled ? { scale: 0.96 } : {}}
+											onClick={() => addToCart(item)}
+											disabled={isDisabled}
+											className={`group relative text-left rounded-2xl border transition-all h-[140px] flex flex-col justify-between p-4 overflow-hidden outline-none ${
+												inCart
+													? "border-[#3282B8] bg-[#E6F4FE] shadow-md"
+													: "border-[#E8ECF1] bg-white shadow-sm hover:shadow-md hover:border-[#BBE1FA]"
+											} ${isDisabled ? "opacity-60 cursor-not-allowed grayscale-[20%]" : ""}`}
 										>
-											<Trash2 size={18} /> Void Order
-										</button>
-										<button
-											onClick={handleSendToKitchen}
-											disabled={isSubmittingOrder || (activeOrderType === "dine_in" && !selectedTableId)}
-											className="col-span-1 flex items-center justify-center gap-2 py-4 rounded-xl bg-[#0F4C75] text-white text-[15px] font-bold hover:bg-[#0A3558] shadow-lg shadow-[#0F4C75]/20 active:scale-[0.98] disabled:opacity-50 disabled:grayscale-[30%] transition-all outline-none"
-										>
-											<ChefHat size={18} /> {isSubmittingOrder ? "..." : "Send to Kitchen"}
-										</button>
-									</>
-								) : (
-									<>
-										<button
-											onClick={handleVoidOrder}
-											disabled={isVoiding}
-											className="col-span-1 flex items-center justify-center gap-2 py-4 rounded-xl bg-[#FFF4F2] text-[#D9381E] border border-[#FFE2DD] shadow-sm text-[15px] font-bold hover:bg-[#FFE2DD] active:scale-[0.98] transition-all outline-none"
-										>
-											<CircleSlash size={18} /> {isVoiding ? "..." : "Void"}
-										</button>
-										<button
-											onClick={() => window.print()}
-											className="col-span-1 flex items-center justify-center gap-2 py-4 rounded-xl bg-white border border-[#E8ECF1] shadow-sm text-[#0A1628] text-[15px] font-bold hover:bg-[#F5F7FA] active:scale-[0.98] transition-all outline-none"
-										>
-											<Printer size={18} /> Print Bill
-										</button>
-										<button
-											onClick={handleCollectPayment}
-											disabled={isProcessingPayment}
-											className="col-span-2 flex items-center justify-center gap-2 py-4 rounded-xl bg-[#10B981] text-white text-lg font-bold hover:bg-[#059669] shadow-lg shadow-[#10B981]/20 active:scale-[0.98] transition-all disabled:opacity-60 outline-none uppercase tracking-wide mt-1"
-										>
-											<CreditCard size={20} strokeWidth={2.5}/> {isProcessingPayment ? "Processing..." : "Pay & Close Ticket"}
-										</button>
-									</>
-								)}
+											{/* Decorator strip */}
+											{inCart && (
+												<div className="absolute top-0 left-0 bottom-0 w-1.5 bg-[#3282B8]" />
+											)}
+
+											<div className="pr-2 z-10 truncate whitespace-normal">
+												<p className="text-[15px] font-bold text-[#0A1628] leading-tight line-clamp-3">
+													{item.name_en}
+												</p>
+											</div>
+											<div className="flex justify-between items-end z-10 w-full mt-2">
+												<p className="text-[15px] font-bold text-[#3282B8]">
+													{item.price.toFixed(3)} KD
+												</p>
+											</div>
+											{inCart && (
+												<div className="absolute top-0 right-0 bg-[#3282B8] text-white text-[13px] font-bold min-w-[32px] h-8 px-2 flex items-center justify-center rounded-bl-xl shadow-sm z-20">
+													x{inCart.quantity}
+												</div>
+											)}
+										</motion.button>
+									);
+								})}
 							</div>
 						</div>
-					)}
-				</aside>
+					</main>
+
+					{/* ── COL 3: Current Ticket (~30%) ── */}
+					<aside className="w-full max-w-[380px] xl:max-w-[420px] bg-white border-l border-[#E8ECF1] flex flex-col shrink-0 shadow-[-8px_0_30px_rgba(0,0,0,0.03)] z-20">
+						{/* Ticket Header */}
+						<div className="p-6 border-b border-[#E8ECF1] flex flex-col gap-1.5 bg-white">
+							<div className="flex items-center justify-between">
+								<h2 className="text-2xl font-bold text-[#0A1628] leading-none">
+									{activeOrderType === "dine_in"
+										? selectedTableId
+											? `Table ${tables.find((t) => t.id === selectedTableId)?.table_number}`
+											: "Select Table"
+										: activeOrderType === "takeaway"
+											? "Takeaway"
+											: existingActiveOrder?.tableNumber
+												? `Table ${existingActiveOrder.tableNumber}`
+												: "Takeaway"}
+								</h2>
+								{activeOrderType === "existing" && (
+									<span className="text-[11px] font-bold bg-[#F5F7FA] border border-[#E8ECF1] text-[#5A6B82] px-2.5 py-1.5 rounded-lg uppercase tracking-widest shadow-sm">
+										{shortOrderId(activeOrderId!)}
+									</span>
+								)}
+							</div>
+							<p className="text-[12px] font-semibold text-[#7B8BA3] uppercase tracking-widest mt-1">
+								{activeOrderType === "existing"
+									? "Current Active Order"
+									: "New Ticket"}
+							</p>
+						</div>
+
+						{/* Ticket Items */}
+						<div className="flex-1 overflow-y-auto p-5 bg-white">
+							{displayItems.length === 0 ? (
+								<div className="h-full flex flex-col items-center justify-center text-[#7B8BA3] opacity-80">
+									<div className="w-20 h-20 rounded-full bg-[#F5F7FA] border border-[#E8ECF1] flex items-center justify-center mb-5 shadow-sm">
+										<UtensilsCrossed size={32} className="text-[#A0ABB8]" />
+									</div>
+									<p className="text-base font-bold text-[#0A1628]">
+										Ticket is Empty
+									</p>
+									<p className="text-[13px] mt-2 text-center text-[#7B8BA3] max-w-[200px] leading-relaxed">
+										Add items from the menu to build an order.
+									</p>
+								</div>
+							) : (
+								<div className="space-y-4">
+									<AnimatePresence>
+										{displayItems.map((item) => (
+											<motion.div
+												layout
+												initial={{ opacity: 0, scale: 0.95 }}
+												animate={{ opacity: 1, scale: 1 }}
+												exit={{ opacity: 0, scale: 0.95 }}
+												key={item.id}
+												className="bg-[#F5F7FA] border border-[#E8ECF1] rounded-2xl p-4 flex flex-col gap-3 group shadow-sm"
+											>
+												<div className="flex justify-between items-start gap-4">
+													<p className="text-[15px] font-bold text-[#0A1628] leading-tight flex-1">
+														{item.name}
+													</p>
+													<p className="text-[15px] font-bold text-[#0F4C75] tabular-nums whitespace-nowrap">
+														{(item.price * item.quantity).toFixed(3)} KD
+													</p>
+												</div>
+
+												{activeOrderType !== "existing" && (
+													<div className="flex items-center self-start bg-white rounded-xl p-1 shadow-sm border border-[#E8ECF1]">
+														<button
+															onClick={() => removeFromCart(item.id)}
+															className="w-10 h-10 rounded-lg flex items-center justify-center text-[#5A6B82] hover:bg-[#FFF4F2] hover:text-[#D9381E] transition-colors outline-none"
+														>
+															{item.quantity > 1 ? (
+																<Minus size={18} strokeWidth={2.5} />
+															) : (
+																<Trash2 size={18} strokeWidth={2.5} />
+															)}
+														</button>
+														<span className="text-[15px] font-bold text-[#0A1628] w-10 text-center tabular-nums">
+															{item.quantity}
+														</span>
+														<button
+															onClick={() => {
+																const rawItem = menuItems.find(
+																	(m) => m.id === item.id,
+																);
+																if (rawItem) addToCart(rawItem);
+															}}
+															className="w-10 h-10 rounded-lg flex items-center justify-center text-[#5A6B82] hover:bg-[#E6F4FE] hover:text-[#0F4C75] transition-colors outline-none"
+														>
+															<Plus size={18} strokeWidth={2.5} />
+														</button>
+													</div>
+												)}
+												{activeOrderType === "existing" && (
+													<div className="text-[11px] font-bold text-[#5A6B82] uppercase tracking-wider bg-white px-3 py-1.5 rounded-lg border border-[#E8ECF1] self-start shadow-sm flex items-center gap-1.5">
+														Qty:{" "}
+														<span className="text-[#0A1628] text-sm tabular-nums">
+															{item.quantity}
+														</span>
+													</div>
+												)}
+											</motion.div>
+										))}
+									</AnimatePresence>
+								</div>
+							)}
+						</div>
+
+						{/* Totals & Actions */}
+						{displayItems.length > 0 && (
+							<div className="flex flex-col border-t border-[#E8ECF1] bg-white z-20 shadow-[0_-10px_40px_rgba(0,0,0,0.03)]">
+								{/* Totals Block */}
+								<div className="border-b border-[#E8ECF1] p-6">
+									<div className="rounded-2xl border border-[#E8ECF1] bg-[#FAFBFC] p-4 shadow-sm">
+										<div className="mb-4 flex items-start justify-between gap-4">
+											<div>
+												<p className="text-xs font-bold uppercase tracking-widest text-[#7B8BA3]">
+													Payment Summary
+												</p>
+												<p className="mt-1 text-sm font-semibold text-[#0A1628]">
+													{activeOrderType === "existing"
+														? "Review the final bill, choose a payment method, and close the ticket."
+														: "Build the order and send it to the kitchen when ready."}
+												</p>
+											</div>
+											<span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[#5A6B82] border border-[#E8ECF1]">
+												{activeOrderType === "existing"
+													? "Settlement"
+													: "Draft"}
+											</span>
+										</div>
+
+										<div className="space-y-2 text-sm text-[#5A6B82]">
+											<div className="flex items-center justify-between">
+												<span>Ticket</span>
+												<span className="font-semibold text-[#0A1628]">
+													{activeOrderType === "existing"
+														? shortOrderId(activeOrderId!)
+														: "New ticket"}
+												</span>
+											</div>
+											<div className="flex items-center justify-between">
+												<span>Order Type</span>
+												<span className="font-semibold text-[#0A1628]">
+													{activeOrderType === "existing"
+														? existingActiveOrder?.tableNumber
+															? "Dine-In"
+															: "Takeaway"
+														: activeOrderType === "dine_in"
+															? "Dine-In"
+															: "Takeaway"}
+												</span>
+											</div>
+											<div className="flex items-center justify-between">
+												<span>Table</span>
+												<span className="font-semibold text-[#0A1628]">
+													{activeOrderType === "existing"
+														? existingActiveOrder?.tableNumber
+															? `Table ${existingActiveOrder.tableNumber}`
+															: "Takeaway"
+														: selectedTableNumber
+															? `Table ${selectedTableNumber}`
+															: "Takeaway"}
+												</span>
+											</div>
+											<div className="flex items-center justify-between">
+												<span>Items</span>
+												<span className="font-semibold text-[#0A1628]">
+													{itemCount}
+												</span>
+											</div>
+										</div>
+
+										<div className="mt-4 flex items-end justify-between border-t border-dashed border-[#D9E4EE] pt-4">
+											<div>
+												<p className="text-xs font-bold uppercase tracking-widest text-[#7B8BA3]">
+													Grand Total
+												</p>
+												<p className="mt-1 text-[13px] font-semibold text-[#5A6B82]">
+													Settle this bill and free the table instantly.
+												</p>
+											</div>
+											<div className="text-right">
+												<p className="text-[32px] font-bold leading-none tracking-tight text-[#0A1628] tabular-nums">
+													{displayTotal.toFixed(3)}
+													<span className="ml-1.5 text-sm font-bold text-[#7B8BA3]">
+														KD
+													</span>
+												</p>
+											</div>
+										</div>
+									</div>
+								</div>
+
+								{/* Action Buttons Grid */}
+								<div className="p-6 grid gap-3 grid-cols-2 bg-[#FAFBFC]">
+									{activeOrderType !== "existing" ? (
+										<>
+											<button
+												onClick={handleVoidOrder}
+												className="col-span-1 flex items-center justify-center gap-2 py-4 rounded-xl bg-white border border-[#E8ECF1] shadow-sm text-[#D9381E] text-[15px] font-bold hover:bg-[#FFF4F2] hover:border-[#FFE2DD] active:scale-[0.98] transition-all outline-none"
+											>
+												<Trash2 size={18} /> Void Order
+											</button>
+											<button
+												onClick={handleSendToKitchen}
+												disabled={
+													isSubmittingOrder ||
+													(activeOrderType === "dine_in" && !selectedTableId)
+												}
+												className="col-span-1 flex items-center justify-center gap-2 py-4 rounded-xl bg-[#0F4C75] text-white text-[15px] font-bold hover:bg-[#0A3558] shadow-lg shadow-[#0F4C75]/20 active:scale-[0.98] disabled:opacity-50 disabled:grayscale-[30%] transition-all outline-none"
+											>
+												<ChefHat size={18} />{" "}
+												{isSubmittingOrder ? "..." : "Send to Kitchen"}
+											</button>
+										</>
+									) : (
+										<>
+											<div className="col-span-2 rounded-2xl border border-[#E8ECF1] bg-white p-3 shadow-sm">
+												<p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-[#7B8BA3]">
+													Payment Method
+												</p>
+												<div className="grid grid-cols-2 gap-2">
+													<button
+														type="button"
+														onClick={() => setPaymentMethod("cash")}
+														className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold transition-all ${
+															paymentMethod === "cash"
+																? "border-[#0F4C75] bg-[#E6F4FE] text-[#0F4C75]"
+																: "border-[#E8ECF1] bg-[#FAFBFC] text-[#5A6B82] hover:border-[#BBE1FA]"
+														}`}
+													>
+														<Banknote size={18} />
+														Cash
+													</button>
+													<button
+														type="button"
+														onClick={() => setPaymentMethod("card")}
+														className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold transition-all ${
+															paymentMethod === "card"
+																? "border-[#0F4C75] bg-[#E6F4FE] text-[#0F4C75]"
+																: "border-[#E8ECF1] bg-[#FAFBFC] text-[#5A6B82] hover:border-[#BBE1FA]"
+														}`}
+													>
+														<CreditCard size={18} />
+														Card
+													</button>
+												</div>
+											</div>
+											<button
+												onClick={handleVoidOrder}
+												disabled={isVoiding}
+												className="col-span-1 flex items-center justify-center gap-2 py-4 rounded-xl bg-[#FFF4F2] text-[#D9381E] border border-[#FFE2DD] shadow-sm text-[15px] font-bold hover:bg-[#FFE2DD] active:scale-[0.98] transition-all outline-none"
+											>
+												<CircleSlash size={18} /> {isVoiding ? "..." : "Void"}
+											</button>
+											<button
+												onClick={() => window.print()}
+												className="col-span-1 flex items-center justify-center gap-2 py-4 rounded-xl bg-white border border-[#E8ECF1] shadow-sm text-[#0A1628] text-[15px] font-bold hover:bg-[#F5F7FA] active:scale-[0.98] transition-all outline-none"
+											>
+												<Printer size={18} /> Print Bill
+											</button>
+											<button
+												onClick={handleCollectPayment}
+												disabled={isProcessingPayment}
+												className="col-span-2 flex items-center justify-center gap-2 py-4 rounded-xl bg-[#10B981] text-white text-lg font-bold hover:bg-[#059669] shadow-lg shadow-[#10B981]/20 active:scale-[0.98] transition-all disabled:opacity-60 outline-none uppercase tracking-wide mt-1"
+											>
+												<CreditCard size={20} strokeWidth={2.5} />{" "}
+												{isProcessingPayment
+													? "Processing..."
+													: `Complete Payment (${paymentMethod})`}
+											</button>
+										</>
+									)}
+								</div>
+							</div>
+						)}
+					</aside>
+				</div>
 			</div>
-			
-			</div>
-			
+
 			{/* Print Template (Hidden normally, rendered as 80mm thermal receipt) */}
 			<div className="hidden print:block w-full bg-white text-black">
-				<ReceiptPrint 
-					order={activeOrderType === "existing" && existingActiveOrder ? {
-						id: existingActiveOrder.id,
-						createdAt: new Date(existingActiveOrder.createdAt),
-						items: existingActiveOrder.items.map(i => ({id: i.id, name: i.name, price: i.price, quantity: i.quantity})),
-						total: existingActiveOrder.total,
-						tableNumber: existingActiveOrder.tableNumber?.toString()
-					} : {
-						id: 'NEW-TICKET',
-						createdAt: new Date(),
-						items: displayItems.map(i => ({id: i.id, name: i.name, price: i.price, quantity: i.quantity})),
-						total: displayTotal,
-						tableNumber: selectedTableId ? tables.find(t=>t.id===selectedTableId)?.table_number?.toString() : undefined
-					}} 
-					restaurantName={restaurant?.name || "Tawla"} 
-					cashierName={"Cashier"} 
+				<ReceiptPrint
+					order={
+						activeOrderType === "existing" && existingActiveOrder
+							? {
+									id: existingActiveOrder.id,
+									createdAt: new Date(existingActiveOrder.createdAt),
+									items: existingActiveOrder.items.map((i) => ({
+										id: i.id,
+										name: i.name,
+										price: i.price,
+										quantity: i.quantity,
+									})),
+									total: existingActiveOrder.total,
+									tableNumber: existingActiveOrder.tableNumber?.toString(),
+									paymentMethod,
+								}
+							: {
+									id: "NEW-TICKET",
+									createdAt: new Date(),
+									items: displayItems.map((i) => ({
+										id: i.id,
+										name: i.name,
+										price: i.price,
+										quantity: i.quantity,
+									})),
+									total: displayTotal,
+									tableNumber: selectedTableId
+										? tables
+												.find((t) => t.id === selectedTableId)
+												?.table_number?.toString()
+										: undefined,
+									paymentMethod,
+								}
+					}
+					restaurantName={restaurant?.name || "Tawla"}
+					cashierName={"Cashier"}
 				/>
 			</div>
 		</>

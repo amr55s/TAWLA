@@ -1,15 +1,32 @@
 "use client";
 
-import { Clock, DollarSign, ExternalLink, ShoppingBag, Utensils } from "lucide-react";
+import {
+	Clock,
+	DollarSign,
+	ExternalLink,
+	ShoppingBag,
+	Utensils,
+} from "lucide-react";
 import { useEffect, useState } from "react";
+import {
+	BarChartCard,
+	type BarChartData,
+} from "@/components/admin/dashboard/BarChartCard";
+import {
+	DonutChartCard,
+	type DonutSegment,
+} from "@/components/admin/dashboard/DonutChartCard";
+import {
+	type RecentOrder,
+	RecentOrdersCard,
+} from "@/components/admin/dashboard/RecentOrdersCard";
+import {
+	type StaffMember,
+	StaffOnDutyCard,
+} from "@/components/admin/dashboard/StaffOnDutyCard";
+import { StatCard } from "@/components/admin/dashboard/StatCard";
 import { useRestaurant } from "@/lib/contexts/RestaurantContext";
 import { createClient } from "@/lib/supabase/client";
-import { StatCard } from "@/components/admin/dashboard/StatCard";
-import { BarChartCard, type BarChartData } from "@/components/admin/dashboard/BarChartCard";
-import { DonutChartCard, type DonutSegment } from "@/components/admin/dashboard/DonutChartCard";
-import { RecentOrdersCard, type RecentOrder } from "@/components/admin/dashboard/RecentOrdersCard";
-import { StaffOnDutyCard, type StaffMember } from "@/components/admin/dashboard/StaffOnDutyCard";
-import { getAveragePrepTime, getKitchenPerformance } from "@/app/actions/analytics.actions";
 
 const supabase = createClient();
 
@@ -29,7 +46,7 @@ export default function AdminDashboardPage() {
 
 	const [mounted, setMounted] = useState(false);
 	const [loading, setLoading] = useState(true);
-	
+
 	const [metrics, setMetrics] = useState<DashboardMetrics>({
 		total_revenue: 0,
 		total_orders: 0,
@@ -40,11 +57,6 @@ export default function AdminDashboardPage() {
 		monthly_revenue: [],
 		recent_orders: [],
 	});
-	const [avgPrepTime, setAvgPrepTime] = useState<number | null>(null);
-	const [kitchenPerf, setKitchenPerf] = useState<{
-		morning?: number;
-		evening?: number;
-	}>({});
 
 	useEffect(() => setMounted(true), []);
 
@@ -55,24 +67,18 @@ export default function AdminDashboardPage() {
 			if (isInitial) setLoading(true);
 
 			try {
-				const { data, error } = await supabase.rpc("get_admin_dashboard_metrics", {
-					p_restaurant_id: restaurantId,
-				});
+				const { data, error } = await supabase.rpc(
+					"get_admin_dashboard_metrics",
+					{
+						p_restaurant_id: restaurantId,
+					},
+				);
 
 				if (error) {
 					console.error("RPC Error:", JSON.stringify(error, null, 2));
 					console.error("Original Error Object:", error);
 				} else if (data) {
 					setMetrics(data as unknown as DashboardMetrics);
-					// Also fetch prep time
-					if (restaurantId) {
-						const { averageMinutes, morningAverageMinutes, eveningAverageMinutes } = await getKitchenPerformance(restaurantId);
-						setAvgPrepTime(averageMinutes);
-						setKitchenPerf({
-							morning: morningAverageMinutes,
-							evening: eveningAverageMinutes,
-						});
-					}
 				}
 			} catch (err) {
 				console.error("Dashboard fetch error:", err);
@@ -145,28 +151,53 @@ export default function AdminDashboardPage() {
 
 	// Calculate DonutChart Data
 	const totalDonut = metrics.total_orders;
-	const colors = ["#0F4C75", "#3282B8", "#BBE1FA", "#5A6B82", "#E8ECF1", "#A0ABC0"];
-	const sortedStatuses = Object.entries(metrics.status_counts || {}).sort((a, b) => b[1] - a[1]);
-	const donutSegments: DonutSegment[] = sortedStatuses.map(([status, count], idx) => ({
-		label: status.replace("_", " "),
-		pct: totalDonut > 0 ? Math.round((count / totalDonut) * 100) : 0,
-		color: colors[idx % colors.length],
-	}));
+	const colors = [
+		"#0F4C75",
+		"#3282B8",
+		"#BBE1FA",
+		"#5A6B82",
+		"#E8ECF1",
+		"#A0ABC0",
+	];
+	const sortedStatuses = Object.entries(metrics.status_counts || {}).sort(
+		(a, b) => b[1] - a[1],
+	);
+	const donutSegments: DonutSegment[] = sortedStatuses.map(
+		([status, count], idx) => ({
+			label: status.replace("_", " "),
+			pct: totalDonut > 0 ? Math.round((count / totalDonut) * 100) : 0,
+			color: colors[idx % colors.length],
+		}),
+	);
 
 	// Calculate BarChart Data based on returned data format
-	const maxRev = metrics.monthly_revenue.length > 0 
-		? Math.max(...metrics.monthly_revenue.map((m: any) => m.value || 0), 1) 
-		: 1;
-		
+	const maxRev =
+		metrics.monthly_revenue.length > 0
+			? Math.max(...metrics.monthly_revenue.map((m: any) => m.value || 0), 1)
+			: 1;
+
 	const barData: BarChartData[] = metrics.monthly_revenue.map((m: any) => ({
 		label: m.label,
 		value: m.value || 0,
-		h: Math.round(((m.value || 0) / maxRev) * 100)
+		h: Math.round(((m.value || 0) / maxRev) * 100),
 	}));
-	
+
 	// Fill missing months for the last 6 months to keep UI consistent
 	const filledBarData: BarChartData[] = [];
-	const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+	const monthNames = [
+		"Jan",
+		"Feb",
+		"Mar",
+		"Apr",
+		"May",
+		"Jun",
+		"Jul",
+		"Aug",
+		"Sep",
+		"Oct",
+		"Nov",
+		"Dec",
+	];
 	const now = new Date();
 	for (let i = 5; i >= 0; i--) {
 		const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -197,15 +228,20 @@ export default function AdminDashboardPage() {
 						rel="noopener noreferrer"
 						className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#E8ECF1] rounded-xl text-sm font-bold text-[#0A1628] hover:bg-[#F5F7FA] hover:border-[#D1D9E2] transition-all shadow-[0_2px_8px_rgba(0,0,0,0.02)] active:scale-95 group"
 					>
-						<span className="text-lg group-hover:scale-110 transition-transform">👨‍🍳</span>
+						<span className="text-lg group-hover:scale-110 transition-transform">
+							👨‍🍳
+						</span>
 						Open Kitchen Display (KDS)
-						<ExternalLink size={14} className="text-[#94A3B8] group-hover:text-[#0F4C75] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+						<ExternalLink
+							size={14}
+							className="text-[#94A3B8] group-hover:text-[#0F4C75] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all"
+						/>
 					</a>
 				</div>
 			</div>
 
 			{/* Stats Row */}
-			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+			<div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
 				<StatCard
 					loading={ctxLoading || loading}
 					title="Today's Revenue"
@@ -215,7 +251,7 @@ export default function AdminDashboardPage() {
 				/>
 				<StatCard
 					loading={ctxLoading || loading}
-					title="Today's Orders"
+					title="Total Orders"
 					value={metrics.total_orders || 0}
 					icon={ShoppingBag}
 					iconBg="bg-blue-50 text-[#3282B8]"
@@ -227,30 +263,12 @@ export default function AdminDashboardPage() {
 					icon={Utensils}
 					iconBg="bg-amber-50 text-amber-600"
 				/>
-				<StatCard
-					loading={ctxLoading || loading || avgPrepTime === null}
-					title="Overall Kitchen Speed"
-					value={`⏱️ ${avgPrepTime || 0} mins`}
-					change={
-						kitchenPerf.morning && kitchenPerf.evening 
-							? `AM: ${kitchenPerf.morning}m | PM: ${kitchenPerf.evening}m` 
-							: undefined
-					}
-					trend={
-						(kitchenPerf.morning || 0) < (kitchenPerf.evening || 0) ? "up" : "down"
-					}
-					icon={Clock}
-					iconBg="bg-rose-50 text-rose-600"
-				/>
 			</div>
 
 			{/* Charts Row */}
 			<div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
 				<div className="lg:col-span-3">
-					<BarChartCard
-						data={filledBarData}
-						loading={ctxLoading || loading}
-					/>
+					<BarChartCard data={filledBarData} loading={ctxLoading || loading} />
 				</div>
 				<div className="lg:col-span-2">
 					<DonutChartCard

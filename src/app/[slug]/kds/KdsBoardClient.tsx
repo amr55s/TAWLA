@@ -12,18 +12,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { useAudioAlert } from "@/hooks/useAudioAlert";
 import {
 	fetchActiveKdsOrders,
 	updateOrderStatus,
 } from "@/app/actions/kds.actions";
-import { type KdsOrderRow } from "@/types/kds";
 import { clearStaffSession } from "@/app/actions/staff-auth";
 import { OrderCard } from "@/components/kds/OrderCard";
+import { useAudioAlert } from "@/hooks/useAudioAlert";
 import { getRestaurantBySlugClient } from "@/lib/data/orders.client";
 import { createClient } from "@/lib/supabase/client";
 import type { Restaurant } from "@/types/database";
-
+import type { KdsOrderRow } from "@/types/kds";
 
 function aggregatePrepTotals(
 	orders: KdsOrderRow[],
@@ -71,7 +70,6 @@ export function KdsBoardClient({ slug }: KdsBoardClientProps) {
 	const { audioEnabled, enableAudio, playNotificationSound } = useAudioAlert();
 
 	const prepTotals = useMemo(() => aggregatePrepTotals(orders), [orders]);
-
 
 	const loadOrders = useCallback(
 		async (opts?: { playOnNew?: boolean }) => {
@@ -144,10 +142,13 @@ export function KdsBoardClient({ slug }: KdsBoardClientProps) {
 		return () => {
 			cancelled = true;
 		};
-	}, [restaurant?.id, loadOrders]);
+	}, [restaurant?.id, restaurant?.plan, loadOrders, supabase]);
 
 	useEffect(() => {
 		if (!restaurant?.id) return;
+
+		const canPlaySound =
+			restaurant?.plan === "pro" || restaurant?.plan === "enterprise";
 
 		const channel = supabase
 			.channel(`kds-orders-${restaurant.id}`)
@@ -159,32 +160,37 @@ export function KdsBoardClient({ slug }: KdsBoardClientProps) {
 					table: "orders",
 					filter: `restaurant_id=eq.${restaurant.id}`,
 				},
-			(payload: any) => {
-				if (payload.new?.status === "pending" || payload.new?.status === "delivered" || payload.new?.status === "cancelled") return;
-				if (restaurant?.plan === "pro" && payload.new?.created_at) {
-					const createdAt = new Date(payload.new.created_at);
-					const monthStart = new Date();
-					monthStart.setDate(1);
-					monthStart.setHours(0, 0, 0, 0);
-					if (createdAt >= monthStart) {
-						setMonthlyOrdersCount((prev) => prev + 1);
+				(payload: any) => {
+					if (
+						payload.new?.status === "pending" ||
+						payload.new?.status === "delivered" ||
+						payload.new?.status === "cancelled"
+					)
+						return;
+					if (restaurant?.plan === "pro" && payload.new?.created_at) {
+						const createdAt = new Date(payload.new.created_at);
+						const monthStart = new Date();
+						monthStart.setDate(1);
+						monthStart.setHours(0, 0, 0, 0);
+						if (createdAt >= monthStart) {
+							setMonthlyOrdersCount((prev) => prev + 1);
+						}
 					}
-				}
-				setTimeout(async () => {
-					if (!restaurant?.id) return;
-					const { data } = await fetchActiveKdsOrders(restaurant.id);
-					if (data) {
-						setOrders((prev) => {
-							const existingIds = new Set(prev.map((o) => o.id));
-							const newOnes = data.filter((o) => !existingIds.has(o.id));
-							if (newOnes.length > 0 && audioEnabled) {
-								playNotificationSound();
-							}
-							return [...prev, ...newOnes];
-						});
-					}
-				}, 1500);
-			},
+					setTimeout(async () => {
+						if (!restaurant?.id) return;
+						const { data } = await fetchActiveKdsOrders(restaurant.id);
+						if (data) {
+							setOrders((prev) => {
+								const existingIds = new Set(prev.map((o) => o.id));
+								const newOnes = data.filter((o) => !existingIds.has(o.id));
+								if (newOnes.length > 0 && audioEnabled && canPlaySound) {
+									playNotificationSound();
+								}
+								return [...prev, ...newOnes];
+							});
+						}
+					}, 1500);
+				},
 			)
 			.on(
 				"postgres_changes",
@@ -194,19 +200,15 @@ export function KdsBoardClient({ slug }: KdsBoardClientProps) {
 					table: "orders",
 					filter: `restaurant_id=eq.${restaurant.id}`,
 				},
-			(payload: any) => {
-				const newStatus = payload.new?.status;
-				if (
-					newStatus === "delivered" ||
-					newStatus === "served" ||
-					newStatus === "cancelled"
-				) {
-					setOrders((prev) => prev.filter((o) => o.id !== payload.new?.id));
-					return;
-				}
-				if (newStatus === "pending") return;
-				void loadOrders({ playOnNew: false });
-			},
+				(payload: any) => {
+					const newStatus = payload.new?.status;
+					if (newStatus === "delivered" || newStatus === "cancelled") {
+						setOrders((prev) => prev.filter((o) => o.id !== payload.new?.id));
+						return;
+					}
+					if (newStatus === "pending") return;
+					void loadOrders({ playOnNew: false });
+				},
 			)
 			.on(
 				"postgres_changes",
@@ -216,18 +218,31 @@ export function KdsBoardClient({ slug }: KdsBoardClientProps) {
 					table: "orders",
 					filter: `restaurant_id=eq.${restaurant.id}`,
 				},
-			(payload: any) => {
-				setOrders((prev) => prev.filter((o) => o.id !== payload.old?.id));
-			},
+				(payload: any) => {
+					setOrders((prev) => prev.filter((o) => o.id !== payload.old?.id));
+				},
 			)
 			.subscribe();
 
 		return () => {
 			void supabase.removeChannel(channel);
 		};
-	}, [restaurant?.id, restaurant?.plan, supabase, loadOrders]);
+	}, [
+		restaurant?.id,
+		restaurant?.plan,
+		supabase,
+		loadOrders,
+		audioEnabled,
+		playNotificationSound,
+	]);
 
 	const handleArmSound = () => {
+		const canPlaySound =
+			restaurant?.plan === "pro" || restaurant?.plan === "enterprise";
+		if (!canPlaySound) {
+			toast.info("Sound alerts are available on Pro/Enterprise plans.");
+			return;
+		}
 		enableAudio();
 		playNotificationSound();
 		toast.success("Kitchen alerts enabled");
@@ -259,7 +274,7 @@ export function KdsBoardClient({ slug }: KdsBoardClientProps) {
 			return;
 		}
 		await loadOrders({ playOnNew: false });
-		toast.success("Order recalled back to kitchen");
+		toast.success("Order recalled to preparing");
 	};
 
 	const handleSignOut = async () => {
@@ -339,9 +354,9 @@ export function KdsBoardClient({ slug }: KdsBoardClientProps) {
 					<div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
 						<div className="font-bold">High Volume Detected</div>
 						<div className="text-xs text-amber-800">
-							This branch has processed {monthlyOrdersCount} orders this month on
-							Pro. Move to Enterprise after {restaurant.max_orders_monthly} orders
-							to unlock larger capacity and branch controls.
+							This branch has processed {monthlyOrdersCount} orders this month
+							on Pro. Move to Enterprise after {restaurant.max_orders_monthly}{" "}
+							orders to unlock larger capacity and branch controls.
 						</div>
 					</div>
 				)}
@@ -356,7 +371,7 @@ export function KdsBoardClient({ slug }: KdsBoardClientProps) {
 
 					{loading ? (
 						<p className="text-center text-gray-500 font-medium py-16 text-lg">
-							Loading kitchen queue…
+							Loading preparation queue…
 						</p>
 					) : orders.length === 0 ? (
 						<div className="flex flex-col items-center justify-center py-20 text-center px-4">
@@ -439,42 +454,44 @@ export function KdsBoardClient({ slug }: KdsBoardClientProps) {
 			) : null}
 
 			{/* -- Initialization Overlay -- */}
-			{!audioEnabled && (
-				<div className="fixed inset-0 z-[100] flex items-center justify-center bg-tawla-deep/95 backdrop-blur-md p-6">
-					<div className="max-w-md w-full text-center space-y-8">
-						<div className="flex justify-center">
-							<div className="relative">
-								<div className="absolute inset-0 animate-ping rounded-full bg-white/20" />
-								<div className="relative size-24 rounded-3xl bg-white flex items-center justify-center text-tawla-deep shadow-2xl">
-									<ChefHat className="size-12" />
+			{!audioEnabled &&
+				(restaurant?.plan === "pro" || restaurant?.plan === "enterprise") && (
+					<div className="fixed inset-0 z-[100] flex items-center justify-center bg-tawla-deep/95 backdrop-blur-md p-6">
+						<div className="max-w-md w-full text-center space-y-8">
+							<div className="flex justify-center">
+								<div className="relative">
+									<div className="absolute inset-0 animate-ping rounded-full bg-white/20" />
+									<div className="relative size-24 rounded-3xl bg-white flex items-center justify-center text-tawla-deep shadow-2xl">
+										<ChefHat className="size-12" />
+									</div>
 								</div>
 							</div>
-						</div>
-						
-						<div className="space-y-3">
-							<h2 className="text-3xl font-black text-white">
-								Ready for service?
-							</h2>
-							<p className="text-white/70 font-medium text-lg leading-relaxed">
-								Click below to initialize the Kitchen Display and enable real-time audio alerts for new tickets.
+
+							<div className="space-y-3">
+								<h2 className="text-3xl font-black text-white">
+									Ready for service?
+								</h2>
+								<p className="text-white/70 font-medium text-lg leading-relaxed">
+									Click below to initialize the Kitchen Display and enable
+									real-time audio alerts for new tickets.
+								</p>
+							</div>
+
+							<button
+								type="button"
+								onClick={handleArmSound}
+								className="group relative w-full inline-flex items-center justify-center gap-3 rounded-2xl bg-white px-8 py-5 text-xl font-black text-tawla-deep shadow-xl transition-all hover:scale-[1.02] active:scale-95"
+							>
+								<PlayCircle className="size-7" />
+								Start Kitchen Display
+							</button>
+
+							<p className="text-white/40 text-sm font-bold uppercase tracking-widest">
+								Tawla KDS System v2.0
 							</p>
 						</div>
-
-						<button
-							type="button"
-							onClick={handleArmSound}
-							className="group relative w-full inline-flex items-center justify-center gap-3 rounded-2xl bg-white px-8 py-5 text-xl font-black text-tawla-deep shadow-xl transition-all hover:scale-[1.02] active:scale-95"
-						>
-							<PlayCircle className="size-7" />
-							Start Kitchen Display
-						</button>
-
-						<p className="text-white/40 text-sm font-bold uppercase tracking-widest">
-							Tawla KDS System v2.0
-						</p>
 					</div>
-				</div>
-			)}
+				)}
 		</div>
 	);
 }

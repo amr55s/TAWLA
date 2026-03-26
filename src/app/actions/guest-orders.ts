@@ -1,7 +1,7 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
 import { isRestaurantOrderingUnavailable } from "@/lib/billing/subscription-status";
+import { createClient } from "@/lib/supabase/server";
 import type { Order, OrderStatus } from "@/types/database";
 
 export interface CreateGuestOrderInput {
@@ -23,6 +23,13 @@ export async function createGuestOrder(
 	input: CreateGuestOrderInput,
 ): Promise<{ ok: true; order: Order } | { ok: false; error: string }> {
 	const supabase = await createClient();
+
+	if (!input.restaurant_id || !input.table_id) {
+		return {
+			ok: false,
+			error: "A valid table number is required to place an order.",
+		};
+	}
 
 	if (!input.items.length) {
 		return { ok: false, error: "No items in order." };
@@ -46,7 +53,9 @@ export async function createGuestOrder(
 
 	const { data: restaurant, error: restaurantError } = await supabase
 		.from("restaurants")
-		.select("id, plan, trial_ends_at, subscription_status, is_active, max_orders_monthly")
+		.select(
+			"id, plan, trial_ends_at, subscription_status, is_active, max_orders_monthly",
+		)
 		.eq("id", input.restaurant_id)
 		.maybeSingle();
 
@@ -98,6 +107,22 @@ export async function createGuestOrder(
 				error: `This restaurant has reached its monthly order limit of ${restaurant.max_orders_monthly}.`,
 			};
 		}
+	}
+
+	const { data: tableData, error: tableError } = await supabase
+		.from("tables")
+		.select("id")
+		.eq("id", input.table_id)
+		.eq("restaurant_id", input.restaurant_id)
+		.maybeSingle();
+
+	if (tableError || !tableData) {
+		return {
+			ok: false,
+			error:
+				tableError?.message ??
+				"A valid table number is required to place an order.",
+		};
 	}
 
 	const uniqueItemIds = Array.from(
